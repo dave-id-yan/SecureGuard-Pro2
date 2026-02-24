@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SecureGuard Pro2</string>
+
+    <!-- Global -->
+    <string name="back">Назад</string>
+    <string name="disconnected">Отключено</string>
+    <string name="connected">Подключено</string>
+    <string name="connect">Подключиться</string>
+    <string name="disconnect">Отключиться</string>
+    <string name="select_server">Выберите сервер</string>
+    <string name="toast_select_server">Выберите сервер!</string>
+    <string name="toast_vpn_connected">VPN подключен: %s</string>
+    <string name="toast_vpn_disconnected">VPN отключен</string>
+    <string name="toast_server_selected">Выбран: %s</string>
+    <string name="toast_opening_feature">Открытие: %s</string>
+
+    <!-- Main Screen -->
+    <string name="main_title">🛡 SecureGuard Pro2</string>
+    <string name="main_subtitle">Ваша защита в цифровом мире</string>
+    <string name="security_status_title">Система защищена</string>
+    <string name="security_status_description">Последняя проверка: 2 минуты назад</string>
+    <string name="security_percentage">90%</string>
+    <string name="security_label">Защищено</string>
+    <string name="ai_assistant_title">Курс безопасности</string>
+    <string name="ai_assistant_description">Новый урок доступен: \"Фишинг атаки\"</string>
+    <string name="ai_assistant_toast">AI курс безопасности</string>
+    <string name="protection_tools_title">Инструменты защиты</string>
+
+    <!-- VPN Screen -->
+    <string name="vpn_screen_title">VPN Защита</string>
+    <string name="available_servers_title">Доступные серверы</string>
+
+    <!-- Features -->
+    <string name="feature_vpn_title">VPN</string>
+    <string name="feature_vpn_desc">Защита соединения</string>
+    <string name="feature_vpn_badge">ON</string>
+    <string name="feature_url_check_title">URL Проверка</string>
+    <string name="feature_url_check_desc">Безопасность ссылок</string>
+    <string name="feature_encryption_title">Шифрование</string>
+    <string name="feature_encryption_desc">Защита файлов</string>
+    <string name="feature_anti_spy_title">Anti Spy</string>
+    <string name="feature_anti_spy_desc">Обнаружение угроз</string>
+    <string name="feature_secure_cloud_title">Secure Cloud</string>
+    <string name="feature_secure_cloud_desc">Облачное хранение</string>
+    <string name="feature_network_scan_title">Network Scan</string>
+    <string name="feature_network_scan_desc">Сканер сети</string>
+    <string name="feature_qr_scanner_title">QR Scanner</string>
+    <string name="feature_qr_scanner_desc">Проверка QR кодов</string>
+    <string name="feature_file_share_title">File Share</string>
+    <string name="feature_file_share_desc">Безопасная отправка</string>
+    <string name="feature_ad_blocker_title">Ad Blocker</string>
+    <string name="feature_ad_blocker_desc">Блокировка рекламы</string>
+    <string name="feature_ad_blocker_badge">NEW</string>
+    <string name="feature_device_scan_title">Device Scan</string>
+    <string name="feature_device_scan_desc">Проверка устройства</string>
+
+    <!-- Servers -->
+    <string name="server_germany">Германия</string>
+    <string name="server_germany_details">Франкфурт • Быстрый</string>
+    <string name="server_germany_ping">12ms</string>
+    <string name="server_netherlands">Нидерланды</string>
+    <string name="server_netherlands_details">Амстердам • Быстрый</string>
+    <string name="server_netherlands_ping">15ms</string>
+    <string name="server_usa">США</string>
+    <string name="server_usa_details">Нью-Йорк • Средний</string>
+    <string name="server_usa_ping">45ms</string>
+    <string name="server_uk">Великобритания</string>
+    <string name="server_uk_details">Лондон • Быстрый</string>
+    <string name="server_uk_ping">18ms</string>
+    <string name="server_france">Франция</string>
+    <string name="server_france_details">Париж • Быстрый</string>
+    <string name="server_france_ping">20ms</string>
+    <string name="server_switzerland">Швейцария</string>
+    <string name="server_switzerland_details">Цюрих • Приватный</string>
+    <string name="server_switzerland_ping">22ms</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_home">Главная</string>
+    <string name="nav_vpn">VPN</string>
+    <string name="nav_ai_course">AI Курс</string>
+    <string name="nav_scanner">Сканер</string>
+    <string name="nav_settings">Настройки</string>
+</resources>
