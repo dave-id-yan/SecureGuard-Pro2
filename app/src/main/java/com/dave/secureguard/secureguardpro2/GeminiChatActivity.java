@@ -29,8 +29,6 @@ import java.util.concurrent.Executors;
 
 public class GeminiChatActivity extends AppCompatActivity {
 
-    private static final String API_KEY = "AIzaSyCZ88rrSSoErBDSmkWi1KyWq9wdN2S14tQ";
-    private static final String API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + API_KEY;
 
     private static final String SYSTEM_PROMPT = "Ты — AI-ассистент по интернет-безопасности в приложении SecureGuard Pro. " +
             "Твоя задача — обучать пользователей интернет-гигиене и безопасности на понятных примерах из жизни. " +
