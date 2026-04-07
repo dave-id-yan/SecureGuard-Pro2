@@ -1,8 +1,6 @@
 package com.dave.secureguard.secureguardpro2;
 
 import android.app.KeyguardManager;
-import android.app.admin.DevicePolicyManager;
-import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -217,12 +215,27 @@ public class SecurityScannerActivity extends AppCompatActivity {
         try {
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
             ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-            NetworkInfo ni = cm != null ? cm.getActiveNetworkInfo() : null;
-            boolean isWifi = ni != null && ni.getType() == ConnectivityManager.TYPE_WIFI;
+            boolean isWifi = false;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && cm != null) {
+                android.net.Network net = cm.getActiveNetwork();
+                android.net.NetworkCapabilities caps = net != null ? cm.getNetworkCapabilities(net) : null;
+                isWifi = caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+            } else if (cm != null) {
+                @SuppressWarnings("deprecation")
+                NetworkInfo ni = cm.getActiveNetworkInfo();
+                isWifi = ni != null && ni.getType() == ConnectivityManager.TYPE_WIFI;
+            }
             if (isWifi && wm != null) {
                 WifiInfo wi = wm.getConnectionInfo();
                 String ssid = wi.getSSID();
-                // Открытая сеть если нет пароля в последних API — проверяем по supplicant state
+                // Убираем кавычки которые Android добавляет вокруг SSID
+                if (ssid != null && ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                    ssid = ssid.substring(1, ssid.length() - 1);
+                }
+                // На Android 10+ без разрешения на геолокацию SSID скрыт
+                if (ssid == null || ssid.equals("<unknown ssid>") || ssid.isEmpty()) {
+                    ssid = "Скрыт (нет разрешения на геолокацию)";
+                }
                 results.add(new ScanResult(
                         "Wi-Fi соединение",
                         "Подключено: " + ssid,
@@ -271,12 +284,31 @@ public class SecurityScannerActivity extends AppCompatActivity {
 
         try { Thread.sleep(300); } catch (Exception ignored) {}
 
-        // 5. Количество установленных приложений
+        // 5. Количество установленных приложений + сторонние установки
         PackageManager pm = getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
         int userApps = 0;
+        int sideloadedCount = 0;
+        List<String> sideloadedNames = new ArrayList<>();
         for (ApplicationInfo app : apps) {
-            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) userApps++;
+            if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+                userApps++;
+                // Проверяем откуда установлено приложение
+                try {
+                    String installer = pm.getInstallerPackageName(app.packageName);
+                    boolean fromPlayStore = "com.android.vending".equals(installer)
+                            || "com.google.android.feedback".equals(installer);
+                    // Исключаем само приложение из списка
+                    boolean isSelf = app.packageName.equals(getPackageName());
+                    if (!fromPlayStore && !isSelf) {
+                        sideloadedCount++;
+                        CharSequence label = pm.getApplicationLabel(app);
+                        if (label != null && !label.toString().isEmpty()) {
+                            sideloadedNames.add(label.toString());
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
         }
         boolean manyApps = userApps > 80;
         results.add(new ScanResult(
@@ -286,6 +318,34 @@ public class SecurityScannerActivity extends AppCompatActivity {
                 manyApps ? "Большое количество приложений увеличивает поверхность атаки. Удалите неиспользуемые." :
                         "Количество приложений в норме."
         ));
+
+        try { Thread.sleep(300); } catch (Exception ignored) {}
+
+        // 5a. Сторонние приложения (не из Play Store)
+        if (sideloadedCount > 0) {
+            StringBuilder sb = new StringBuilder();
+            int showMax = Math.min(sideloadedNames.size(), 5);
+            for (int i = 0; i < showMax; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(sideloadedNames.get(i));
+            }
+            if (sideloadedNames.size() > 5) {
+                sb.append(" и ещё ").append(sideloadedNames.size() - 5);
+            }
+            results.add(new ScanResult(
+                    "Сторонние приложения",
+                    sideloadedCount + " прил. не из Play Store: " + sb,
+                    ScanResult.STATUS_WARN,
+                    "Приложения из неизвестных источников могут содержать вредоносный код. Проверьте каждое."
+            ));
+        } else {
+            results.add(new ScanResult(
+                    "Сторонние приложения",
+                    "Все приложения из Play Store",
+                    ScanResult.STATUS_OK,
+                    "Только официальные источники — хороший знак безопасности."
+            ));
+        }
 
         try { Thread.sleep(300); } catch (Exception ignored) {}
 
