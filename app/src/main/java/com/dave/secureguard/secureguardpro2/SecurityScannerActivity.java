@@ -194,19 +194,19 @@ public class SecurityScannerActivity extends AppCompatActivity {
     private List<ScanResult> performScan() {
         List<ScanResult> results = new ArrayList<>();
 
-        // 1. Экран блокировки
+        // 1. Экран блокировки — только информационный совет, не влияет на счёт
         try {
             KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
             boolean hasLock = km != null && km.isDeviceSecure();
             results.add(new ScanResult(
                     "Экран блокировки",
-                    hasLock ? "Установлен PIN/пароль/отпечаток" : "Экран блокировки не защищён!",
-                    hasLock ? ScanResult.STATUS_OK : ScanResult.STATUS_WARN,
-                    hasLock ? "Устройство защищено от несанкционированного доступа." :
-                            "Рекомендуем установить PIN-код или отпечаток пальца в настройках."
+                    hasLock ? "Установлен PIN/пароль/отпечаток" : "Экран блокировки не настроен",
+                    ScanResult.STATUS_INFO, // Всегда INFO — не влияет на счёт безопасности
+                    hasLock ? "Отлично! Физический доступ к устройству защищён." :
+                            "💡 Совет: установите PIN-код или отпечаток пальца в Настройки → Безопасность."
             ));
         } catch (Exception e) {
-            results.add(new ScanResult("Экран блокировки", "Не удалось проверить", ScanResult.STATUS_WARN, ""));
+            results.add(new ScanResult("Экран блокировки", "Не удалось проверить", ScanResult.STATUS_INFO, ""));
         }
 
         try { Thread.sleep(300); } catch (Exception ignored) {}
@@ -371,11 +371,12 @@ public class SecurityScannerActivity extends AppCompatActivity {
         scanButton.setAlpha(1f);
         resultsContainer.removeAllViews();
 
-        // Подсчёт очков
+        // Подсчёт очков — STATUS_INFO не влияет на счёт
         int score = 100;
         for (ScanResult r : results) {
             if (r.status == ScanResult.STATUS_WARN) score -= 10;
             if (r.status == ScanResult.STATUS_DANGER) score -= 20;
+            // STATUS_INFO и STATUS_OK не уменьшают счёт
         }
         score = Math.max(0, score);
 
@@ -431,7 +432,8 @@ public class SecurityScannerActivity extends AppCompatActivity {
         switch (result.status) {
             case ScanResult.STATUS_OK: borderColor = "#B9BE8A"; break;
             case ScanResult.STATUS_WARN: borderColor = "#C8A84B"; break;
-            default: borderColor = "#C85A4B"; break;
+            case ScanResult.STATUS_DANGER: borderColor = "#C85A4B"; break;
+            default: borderColor = "#6B8A9E"; break; // STATUS_INFO — синеватый, нейтральный
         }
         cardBg.setStroke(dp(1), Color.parseColor(borderColor));
         card.setBackground(cardBg);
@@ -459,7 +461,8 @@ public class SecurityScannerActivity extends AppCompatActivity {
         switch (result.status) {
             case ScanResult.STATUS_OK: statusLabel = "ОК"; break;
             case ScanResult.STATUS_WARN: statusLabel = "!"; break;
-            default: statusLabel = "!!"; break;
+            case ScanResult.STATUS_DANGER: statusLabel = "!!"; break;
+            default: statusLabel = "💡"; break;
         }
         TextView statusBadge = new TextView(this);
         statusBadge.setText(statusLabel);
@@ -511,6 +514,7 @@ public class SecurityScannerActivity extends AppCompatActivity {
         static final int STATUS_OK = 0;
         static final int STATUS_WARN = 1;
         static final int STATUS_DANGER = 2;
+        static final int STATUS_INFO = 3;
 
         String title;
         String detail;

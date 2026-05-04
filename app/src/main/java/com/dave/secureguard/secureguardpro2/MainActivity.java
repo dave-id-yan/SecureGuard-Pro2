@@ -34,80 +34,71 @@ public class MainActivity extends AppCompatActivity {
     private TextView securityScoreText;
     private View securityCircleOuter;
 
+    // Карточка Ad Blocker — храним для смены цвета
+    private View adBlockerCard;
+    private View adBlockerIconView;
+
     private final ActivityResultLauncher<Intent> vpnLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (result.getResultCode() == RESULT_OK) {
-                    startVPN();
-                }
-            }
+            result -> { if (result.getResultCode() == RESULT_OK) startVPN(); }
+    );
+
+    private final ActivityResultLauncher<Intent> adBlockerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> { if (result.getResultCode() == RESULT_OK) startAdBlockerService(); }
     );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
-
         rootLayout = new FrameLayout(this);
         rootLayout.setBackgroundColor(Color.parseColor("#12120A"));
-
         showMainScreen();
         createBottomNavigation();
-
         setContentView(rootLayout);
-
         viewModel.isVpnConnected.observe(this, this::updateVpnUI);
         viewModel.selectedCountry.observe(this, country -> {
-            if (vpnLocationText != null) {
+            if (vpnLocationText != null)
                 vpnLocationText.setText(country == null || country.isEmpty() ?
                         getString(R.string.select_server) : country);
-            }
         });
         viewModel.securityScore.observe(this, score -> {
             if (securityScoreText == null) return;
-            if (score == -1) {
-                securityScoreText.setText("?");
-            } else {
-                securityScoreText.setText(score + "%");
-                // Меняем цвет круга в зависимости от счёта
-                String color = score >= 80 ? "#B9BE8A" : score >= 50 ? "#C8A84B" : "#C85A4B";
-                if (securityCircleOuter != null) {
-                    GradientDrawable d = new GradientDrawable();
-                    d.setShape(GradientDrawable.OVAL);
-                    d.setStroke(dp(10), Color.parseColor(color));
-                    securityCircleOuter.setBackground(d);
-                }
-            }
+            securityScoreText.setText(score == -1 ? "?" : score + "%");
+            if (score != -1) updateScoreCircle(score);
         });
     }
-
-    // ─── Экраны ──────────────────────────────────────────────────────────────
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Читаем счёт из SharedPreferences — туда пишет SecurityScannerActivity
-        int score = getSharedPreferences("secureguard", MODE_PRIVATE)
-                .getInt("security_score", -1);
+        int score = getSharedPreferences("secureguard", MODE_PRIVATE).getInt("security_score", -1);
         if (securityScoreText != null && score != -1) {
             securityScoreText.setText(score + "%");
-            String color = score >= 80 ? "#B9BE8A" : score >= 50 ? "#C8A84B" : "#C85A4B";
-            if (securityCircleOuter != null) {
-                GradientDrawable d = new GradientDrawable();
-                d.setShape(GradientDrawable.OVAL);
-                d.setStroke(dp(10), Color.parseColor(color));
-                securityCircleOuter.setBackground(d);
-            }
+            updateScoreCircle(score);
         }
     }
 
+    private void updateScoreCircle(int score) {
+        String color = score >= 80 ? "#B9BE8A" : score >= 50 ? "#C8A84B" : "#C85A4B";
+        if (securityCircleOuter != null) {
+            GradientDrawable d = new GradientDrawable();
+            d.setShape(GradientDrawable.OVAL);
+            d.setStroke(dp(10), Color.parseColor(color));
+            securityCircleOuter.setBackground(d);
+        }
+    }
+
+    // ─── Экраны ──────────────────────────────────────────────────────────────
+
     private void showMainScreen() {
         if (currentScreen != null) rootLayout.removeView(currentScreen);
+        adBlockerCard = null;
+        adBlockerIconView = null;
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
-
         mainContainer = new LinearLayout(this);
         mainContainer.setOrientation(LinearLayout.VERTICAL);
         mainContainer.setBackgroundColor(Color.parseColor("#12120A"));
@@ -125,32 +116,24 @@ public class MainActivity extends AppCompatActivity {
         currentScreen.addView(scrollView);
         rootLayout.addView(currentScreen, 0, new FrameLayout.LayoutParams(-1, -1));
 
-        // Принудительно обновляем счёт после пересоздания View
-        int score = getSharedPreferences("secureguard", MODE_PRIVATE)
-                .getInt("security_score", -1);
+        int score = getSharedPreferences("secureguard", MODE_PRIVATE).getInt("security_score", -1);
         if (score != -1 && securityScoreText != null) {
             securityScoreText.setText(score + "%");
-            String color = score >= 80 ? "#B9BE8A" : score >= 50 ? "#C8A84B" : "#C85A4B";
-            if (securityCircleOuter != null) {
-                GradientDrawable d = new GradientDrawable();
-                d.setShape(GradientDrawable.OVAL);
-                d.setStroke(dp(10), Color.parseColor(color));
-                securityCircleOuter.setBackground(d);
-            }
+            updateScoreCircle(score);
         }
     }
 
     private void showVPNScreen() {
         if (currentScreen != null) rootLayout.removeView(currentScreen);
+        adBlockerCard = null;
+        adBlockerIconView = null;
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
-
         LinearLayout vpnContainer = new LinearLayout(this);
         vpnContainer.setOrientation(LinearLayout.VERTICAL);
         vpnContainer.setBackgroundColor(Color.parseColor("#12120A"));
         vpnContainer.setPadding(0, 0, 0, dp(100));
-
         mainContainer = vpnContainer;
 
         createVPNHeader();
@@ -175,19 +158,16 @@ public class MainActivity extends AppCompatActivity {
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
         header.setBackground(bg);
-
         TextView title = new TextView(this);
         title.setText("SecureGuard Pro");
         title.setTextColor(Color.parseColor("#B9BE8A"));
         title.setTextSize(24);
         title.setTypeface(null, Typeface.BOLD);
-
         TextView subtitle = new TextView(this);
         subtitle.setText("Ваша защита в цифровом мире");
         subtitle.setTextColor(Color.parseColor("#82855A"));
         subtitle.setTextSize(13);
         subtitle.setPadding(0, dp(4), 0, 0);
-
         header.addView(title);
         header.addView(subtitle);
         mainContainer.addView(header);
@@ -200,9 +180,7 @@ public class MainActivity extends AppCompatActivity {
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
         header.setBackground(bg);
-
         TextView backBtn = makeCircleButton("←", v -> showMainScreen());
-
         TextView title = new TextView(this);
         title.setText("VPN Защита");
         title.setTextColor(Color.parseColor("#B9BE8A"));
@@ -211,7 +189,6 @@ public class MainActivity extends AppCompatActivity {
         title.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1);
         tp.setMargins(dp(15), 0, dp(15), 0);
-
         header.addView(backBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
         header.addView(title, tp);
         header.addView(new View(this), new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -233,7 +210,6 @@ public class MainActivity extends AppCompatActivity {
         bg.setCornerRadius(dp(20));
         card.setBackground(bg);
 
-        // Круг с процентом
         FrameLayout circleContainer = new FrameLayout(this);
         View outer = new View(this);
         GradientDrawable outerBg = new GradientDrawable();
@@ -271,8 +247,6 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(100), dp(100));
         ip.gravity = Gravity.CENTER;
         circleContainer.addView(inner, ip);
-
-        // Кружок кликабельный — открывает сканер
         circleContainer.setOnClickListener(v ->
                 startActivity(new Intent(this, SecurityScannerActivity.class)));
         circleContainer.setClickable(true);
@@ -313,47 +287,39 @@ public class MainActivity extends AppCompatActivity {
         card.setBackground(bg);
         card.setOnClickListener(v -> startActivity(new Intent(this, GeminiChatActivity.class)));
 
-        // AI иконка — нарисованная
         FrameLayout iconContainer = new FrameLayout(this);
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(48), dp(48));
         iconParams.setMargins(0, 0, dp(15), 0);
-
         View iconBg = new View(this);
-        GradientDrawable iconBgDrawable = new GradientDrawable();
-        iconBgDrawable.setShape(GradientDrawable.OVAL);
-        iconBgDrawable.setColor(Color.parseColor("#2E2F1C"));
-        iconBgDrawable.setStroke(dp(2), Color.parseColor("#B9BE8A"));
-        iconBg.setBackground(iconBgDrawable);
-
+        GradientDrawable iconBgD = new GradientDrawable();
+        iconBgD.setShape(GradientDrawable.OVAL);
+        iconBgD.setColor(Color.parseColor("#2E2F1C"));
+        iconBgD.setStroke(dp(2), Color.parseColor("#B9BE8A"));
+        iconBg.setBackground(iconBgD);
         TextView iconText = new TextView(this);
         iconText.setText("AI");
         iconText.setTextColor(Color.parseColor("#B9BE8A"));
         iconText.setTextSize(14);
         iconText.setTypeface(null, Typeface.BOLD);
         iconText.setGravity(Gravity.CENTER);
-
         iconContainer.addView(iconBg, new FrameLayout.LayoutParams(-1, -1));
         iconContainer.addView(iconText, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout textBlock = new LinearLayout(this);
         textBlock.setOrientation(LinearLayout.VERTICAL);
-
         TextView aiTitle = new TextView(this);
         aiTitle.setText("AI Курс безопасности");
         aiTitle.setTextColor(Color.parseColor("#B9BE8A"));
         aiTitle.setTypeface(null, Typeface.BOLD);
         aiTitle.setTextSize(15);
-
         TextView aiDesc = new TextView(this);
         aiDesc.setText("Новый урок: «Фишинг атаки» • Нажмите для чата");
         aiDesc.setTextColor(Color.parseColor("#82855A"));
         aiDesc.setTextSize(11);
         aiDesc.setPadding(0, dp(3), 0, 0);
-
         textBlock.addView(aiTitle);
         textBlock.addView(aiDesc);
 
-        // Стрелка вправо
         TextView arrow = new TextView(this);
         arrow.setText("›");
         arrow.setTextColor(Color.parseColor("#B9BE8A"));
@@ -381,7 +347,6 @@ public class MainActivity extends AppCompatActivity {
         bg.setCornerRadius(dp(20));
         card.setBackground(bg);
 
-        // VPN круг с иконкой замка
         FrameLayout circleFrame = new FrameLayout(this);
         vpnCircle = new View(this);
         GradientDrawable circleBg = new GradientDrawable();
@@ -389,12 +354,10 @@ public class MainActivity extends AppCompatActivity {
         circleBg.setColor(Color.parseColor("#2E2F1C"));
         circleBg.setStroke(dp(5), Color.parseColor("#666844"));
         vpnCircle.setBackground(circleBg);
-
         vpnCircleIcon = new TextView(this);
         vpnCircleIcon.setTextSize(40);
         vpnCircleIcon.setGravity(Gravity.CENTER);
-        vpnCircleIcon.setText(makeShieldText());
-
+        vpnCircleIcon.setText("⊕");
         circleFrame.addView(vpnCircle, new FrameLayout.LayoutParams(dp(150), dp(150)));
         circleFrame.addView(vpnCircleIcon, new FrameLayout.LayoutParams(-1, dp(150)));
 
@@ -411,18 +374,15 @@ public class MainActivity extends AppCompatActivity {
         vpnLocationText.setTextSize(14);
         vpnLocationText.setGravity(Gravity.CENTER);
 
-        // Кастомная кнопка
         FrameLayout btnFrame = new FrameLayout(this);
         LinearLayout.LayoutParams btnFrameParams = new LinearLayout.LayoutParams(-1, -2);
         btnFrameParams.setMargins(0, dp(20), 0, 0);
         btnFrame.setLayoutParams(btnFrameParams);
-
         View btnBg = new View(this);
         GradientDrawable btnDrawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.parseColor("#B9BE8A"), Color.parseColor("#9DA171")});
         btnDrawable.setCornerRadius(dp(15));
         btnBg.setBackground(btnDrawable);
-
         connectButtonText = new TextView(this);
         connectButtonText.setText(getString(R.string.connect));
         connectButtonText.setTextColor(Color.parseColor("#12120A"));
@@ -430,7 +390,6 @@ public class MainActivity extends AppCompatActivity {
         connectButtonText.setTypeface(null, Typeface.BOLD);
         connectButtonText.setGravity(Gravity.CENTER);
         connectButtonText.setPadding(0, dp(18), 0, dp(18));
-
         btnFrame.addView(btnBg, new FrameLayout.LayoutParams(-1, -1));
         btnFrame.addView(connectButtonText, new FrameLayout.LayoutParams(-1, -2));
         connectButton = btnFrame;
@@ -474,65 +433,54 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void stopVPN() {
-        stopService(new Intent(this, VPNService.class));
+        Intent stop = new Intent(this, VPNService.class);
+        stop.setAction("STOP");
+        startService(stop);
         viewModel.onVpnConnectionChanged(false);
         Toast.makeText(this, getString(R.string.toast_vpn_disconnected), Toast.LENGTH_SHORT).show();
     }
 
     private void updateVpnUI(boolean isConnected) {
         if (vpnStatusText == null || vpnCircle == null) return;
-
         vpnStatusText.setText(isConnected ? getString(R.string.connected) : getString(R.string.disconnected));
         if (connectButtonText != null)
             connectButtonText.setText(isConnected ? getString(R.string.disconnect) : getString(R.string.connect));
-
         GradientDrawable circleBg = new GradientDrawable();
         circleBg.setShape(GradientDrawable.OVAL);
         circleBg.setColor(Color.parseColor("#2E2F1C"));
         circleBg.setStroke(dp(5), Color.parseColor(isConnected ? "#B9BE8A" : "#666844"));
         vpnCircle.setBackground(circleBg);
-
         if (connectButton != null) {
             GradientDrawable btnBg;
             if (isConnected) {
                 btnBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                         new int[]{Color.parseColor("#666844"), Color.parseColor("#4A4B2F")});
-                if (connectButtonText != null)
-                    connectButtonText.setTextColor(Color.parseColor("#B9BE8A"));
+                if (connectButtonText != null) connectButtonText.setTextColor(Color.parseColor("#B9BE8A"));
             } else {
                 btnBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                         new int[]{Color.parseColor("#B9BE8A"), Color.parseColor("#9DA171")});
-                if (connectButtonText != null)
-                    connectButtonText.setTextColor(Color.parseColor("#12120A"));
+                if (connectButtonText != null) connectButtonText.setTextColor(Color.parseColor("#12120A"));
             }
             btnBg.setCornerRadius(dp(15));
             ((FrameLayout) connectButton).getChildAt(0).setBackground(btnBg);
         }
     }
 
-    // ─── Server List ─────────────────────────────────────────────────────────
+    // ─── Server List ──────────────────────────
 
     private void createServerList() {
         LinearLayout serverList = new LinearLayout(this);
         serverList.setOrientation(LinearLayout.VERTICAL);
         serverList.setPadding(dp(20), 0, dp(20), dp(20));
 
-        String[][] servers = {
-                {"Германия", "🇩🇪", "Франкфурт • Быстрый", "12ms"},
-                {"Нидерланды", "🇳🇱", "Амстердам • Быстрый", "15ms"},
-                {"США", "🇺🇸", "Нью-Йорк • Средний", "45ms"},
-                {"Великобритания", "🇬🇧", "Лондон • Быстрый", "18ms"},
-                {"Франция", "🇫🇷", "Париж • Быстрый", "20ms"},
-                {"Швейцария", "🇨🇭", "Цюрих • Приватный", "22ms"}
-        };
-
-        for (String[] server : servers) {
-            createServerItem(serverList, server[0], server[1], server[2], server[3]);
+        for (String[] server : VPNService.SERVER_LIST) {
+            createServerItem(serverList, server[0], server[1], server[2], server[3], server[4]);
         }
         mainContainer.addView(serverList);
     }
 
-    private void createServerItem(LinearLayout parent, String country, String flag, String details, String ping) {
+    private void createServerItem(LinearLayout parent, String country, String flagCode,
+                                  String details, String ping, String tag) {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setPadding(dp(20), dp(15), dp(20), dp(15));
@@ -540,10 +488,14 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-1, -2);
         ip.setMargins(0, 0, 0, dp(10));
         item.setLayoutParams(ip);
+
+        boolean isNoAds = "no_ads".equals(tag);
+        String borderColor = isNoAds ? "#82B09A" : "#666844";  // Зеленоватый для "без рекламы"
+
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
         bg.setCornerRadius(dp(15));
-        bg.setStroke(dp(1), Color.parseColor("#666844"));
+        bg.setStroke(dp(isNoAds ? 2 : 1), Color.parseColor(borderColor));
         item.setBackground(bg);
         item.setOnClickListener(v -> {
             viewModel.onCountrySelected(country);
@@ -551,35 +503,41 @@ public class MainActivity extends AppCompatActivity {
         });
 
         TextView flagView = new TextView(this);
-        flagView.setText(flag);
-        flagView.setTextSize(28);
-        flagView.setPadding(0, 0, dp(15), 0);
+        flagView.setText(flagCode);
+        flagView.setTextColor(Color.parseColor("#B9BE8A"));
+        flagView.setTextSize(13);
+        flagView.setTypeface(null, Typeface.BOLD);
+        flagView.setGravity(Gravity.CENTER);
+        GradientDrawable flagBg = new GradientDrawable();
+        flagBg.setColor(Color.parseColor("#1E1F13"));
+        flagBg.setCornerRadius(dp(6));
+        flagView.setBackground(flagBg);
+        flagView.setPadding(dp(6), dp(4), dp(6), dp(4));
+        LinearLayout.LayoutParams flagParams = new LinearLayout.LayoutParams(-2, -2);
+        flagParams.setMargins(0, 0, dp(15), 0);
 
         LinearLayout textBlock = new LinearLayout(this);
         textBlock.setOrientation(LinearLayout.VERTICAL);
-
         TextView countryView = new TextView(this);
         countryView.setText(country);
         countryView.setTextColor(Color.parseColor("#B9BE8A"));
         countryView.setTextSize(15);
         countryView.setTypeface(null, Typeface.BOLD);
-
         TextView detailsView = new TextView(this);
         detailsView.setText(details);
         detailsView.setTextColor(Color.parseColor("#82855A"));
         detailsView.setTextSize(12);
-
         textBlock.addView(countryView);
         textBlock.addView(detailsView);
 
-        // Пинг с кастомным бейджем
+
         LinearLayout pingBadge = new LinearLayout(this);
         pingBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
         pingBadge.setGravity(Gravity.CENTER);
         GradientDrawable pingBg = new GradientDrawable();
         pingBg.setColor(Color.parseColor("#1E1F13"));
         pingBg.setCornerRadius(dp(8));
-        pingBg.setStroke(dp(1), Color.parseColor("#3A3B25"));
+        pingBg.setStroke(dp(1), Color.parseColor(borderColor));
         pingBadge.setBackground(pingBg);
         TextView pingText = new TextView(this);
         pingText.setText(ping);
@@ -587,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
         pingText.setTextSize(12);
         pingBadge.addView(pingText);
 
-        item.addView(flagView);
+        item.addView(flagView, flagParams);
         item.addView(textBlock, new LinearLayout.LayoutParams(0, -2, 1));
         item.addView(pingBadge);
         parent.addView(item);
@@ -600,18 +558,10 @@ public class MainActivity extends AppCompatActivity {
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setPadding(dp(20), 0, dp(20), dp(20));
 
-        // icon, title, desc, badge
         Object[][] features = {
-                {"shield",  "VPN",           "Защита соединения",  "ON"},
-                {"scan",    "Сканер",         "Безопасность устройства", ""},
-                {"search",  "URL Проверка",   "Безопасность ссылок", ""},
-                {"lock",    "Шифрование",     "Защита файлов",       ""},
-                {"eye",     "Anti Spy",       "Обнаружение угроз",   ""},
-                {"cloud",   "Secure Cloud",   "Облачное хранение",   ""},
-                {"wifi",    "Network Scan",   "Сканер сети",         ""},
-                {"qr",      "QR Scanner",     "Проверка QR кодов",   ""},
-                {"share",   "File Share",     "Безопасная отправка", ""},
-                {"block",   "Ad Blocker",     "Блокировка рекламы",  "NEW"},
+                {"shield",  "VPN",        "Защита соединения",      "ON"},
+                {"scan",    "Сканер",     "Безопасность устройства",  ""},
+                {"block",   "Ad Blocker", "Блокировка рекламы",      AdBlockerService.isRunning ? "ON" : "NEW"},
         };
 
         LinearLayout row = null;
@@ -627,7 +577,7 @@ public class MainActivity extends AppCompatActivity {
             final int idx = i;
             final Object[] feat = features[i];
             createFeatureCard(row, (String) feat[0], (String) feat[1],
-                    (String) feat[2], (String) feat[3], v -> onFeatureTap(idx, feat));
+                    (String) feat[2], (String) feat[3], idx, v -> onFeatureTap(idx, feat));
         }
         mainContainer.addView(grid);
     }
@@ -637,14 +587,56 @@ public class MainActivity extends AppCompatActivity {
             showVPNScreen();
         } else if (idx == 1) {
             startActivity(new Intent(this, SecurityScannerActivity.class));
-        } else {
-            // Placeholder для остальных
-            Toast.makeText(this, (String) feat[1] + " — скоро", Toast.LENGTH_SHORT).show();
+        } else if (idx == 2) {
+            toggleAdBlocker();
         }
     }
 
+    private void toggleAdBlocker() {
+        if (AdBlockerService.isRunning) {
+            Intent stopIntent = new Intent(this, AdBlockerService.class);
+            stopIntent.setAction("STOP");
+            startService(stopIntent);
+            updateAdBlockerCardColor(false);
+            Toast.makeText(this, "Ad Blocker отключён", Toast.LENGTH_SHORT).show();
+        } else {
+            Intent vpnIntent = android.net.VpnService.prepare(this);
+            if (vpnIntent != null) {
+                adBlockerLauncher.launch(vpnIntent);
+            } else {
+                startAdBlockerService();
+            }
+        }
+    }
+
+    private void startAdBlockerService() {
+        Intent intent = new Intent(this, AdBlockerService.class);
+        startService(intent);
+        updateAdBlockerCardColor(true);
+        Toast.makeText(this, "Ad Blocker включён — реклама блокируется", Toast.LENGTH_SHORT).show();
+    }
+
+
+    private void updateAdBlockerCardColor(boolean active) {
+        if (adBlockerCard == null) return;
+        GradientDrawable bg;
+        if (active) {
+            bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.parseColor("#6A7050"), Color.parseColor("#4A4B2F")});
+            bg.setCornerRadius(dp(15));
+            bg.setStroke(dp(2), Color.parseColor("#B9BE8A")); // Яркая рамка
+        } else {
+            bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
+            bg.setCornerRadius(dp(15));
+            bg.setStroke(dp(1), Color.parseColor("#666844"));
+        }
+        adBlockerCard.setBackground(bg);
+    }
+
     private void createFeatureCard(LinearLayout parent, String iconKey, String title,
-                                   String desc, String badge, View.OnClickListener listener) {
+                                   String desc, String badge, int featureIndex,
+                                   View.OnClickListener listener) {
         FrameLayout container = new FrameLayout(this);
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1);
         boolean isLeft = parent.getChildCount() == 0;
@@ -662,7 +654,12 @@ public class MainActivity extends AppCompatActivity {
         card.setBackground(bg);
         card.setOnClickListener(listener);
 
-        // Кастомная иконка вместо эмодзи
+
+        if (featureIndex == 2) {
+            adBlockerCard = card;
+            if (AdBlockerService.isRunning) updateAdBlockerCardColor(true);
+        }
+
         View iconView = makeFeatureIcon(iconKey);
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(44), dp(44));
         iconParams.gravity = Gravity.CENTER_HORIZONTAL;
@@ -706,13 +703,8 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(container);
     }
 
-    /**
-     * Рисует кастомную иконку без эмодзи — геометрические фигуры в стиле приложения.
-     */
     private View makeFeatureIcon(String key) {
         FrameLayout frame = new FrameLayout(this);
-
-        // Фоновый круг
         View circle = new View(this);
         GradientDrawable circleBg = new GradientDrawable();
         circleBg.setShape(GradientDrawable.OVAL);
@@ -720,44 +712,18 @@ public class MainActivity extends AppCompatActivity {
         circleBg.setStroke(dp(2), Color.parseColor("#666844"));
         circle.setBackground(circleBg);
         frame.addView(circle, new FrameLayout.LayoutParams(-1, -1));
-
-        // Центральный символ — уникальный для каждой иконки
         TextView symbol = new TextView(this);
         symbol.setGravity(Gravity.CENTER);
         symbol.setTextColor(Color.parseColor("#B9BE8A"));
         symbol.setTypeface(null, Typeface.BOLD);
-
         switch (key) {
-            case "shield":
-                symbol.setText("⊕"); symbol.setTextSize(18); break;
-            case "scan":
-                symbol.setText("◈"); symbol.setTextSize(18); break;
-            case "search":
-                symbol.setText("⌕"); symbol.setTextSize(20); break;
-            case "lock":
-                symbol.setText("⊗"); symbol.setTextSize(18); break;
-            case "eye":
-                symbol.setText("◉"); symbol.setTextSize(18); break;
-            case "cloud":
-                symbol.setText("≋"); symbol.setTextSize(20); break;
-            case "wifi":
-                symbol.setText("⊞"); symbol.setTextSize(18); break;
-            case "qr":
-                symbol.setText("⊟"); symbol.setTextSize(18); break;
-            case "share":
-                symbol.setText("⊳"); symbol.setTextSize(18); break;
-            case "block":
-                symbol.setText("⊘"); symbol.setTextSize(18); break;
-            default:
-                symbol.setText("◆"); symbol.setTextSize(16); break;
+            case "shield": symbol.setText("⊕"); symbol.setTextSize(18); break;
+            case "scan":   symbol.setText("◈"); symbol.setTextSize(18); break;
+            case "block":  symbol.setText("⊘"); symbol.setTextSize(18); break;
+            default:       symbol.setText("◆"); symbol.setTextSize(16); break;
         }
-
         frame.addView(symbol, new FrameLayout.LayoutParams(-1, -1));
         return frame;
-    }
-
-    private String makeShieldText() {
-        return "⊕";
     }
 
     // ─── Section Title ───────────────────────────────────────────────────────
@@ -772,7 +738,7 @@ public class MainActivity extends AppCompatActivity {
         mainContainer.addView(tv);
     }
 
-    // ─── Bottom Navigation ───────────────────────────────────────────────────
+    // ─── Bottom Navigation — ───────────────────────────
 
     private void createBottomNavigation() {
         LinearLayout nav = new LinearLayout(this);
@@ -786,13 +752,11 @@ public class MainActivity extends AppCompatActivity {
         navBg.setCornerRadii(new float[]{dp(30), dp(30), dp(30), dp(30), 0, 0, 0, 0});
         nav.setBackground(navBg);
 
-        // Иконки навигации — геометрические символы
         String[][] navItems = {
-                {"⌂", "Главная"},
-                {"⊕", "VPN"},
+                {"⌂",  "Главная"},
+                {"⊕",  "VPN"},
                 {"AI", "AI Курс"},
-                {"◈", "Сканер"},
-                {"⊙", "Настройки"}
+                {"◈",  "Сканер"}
         };
 
         for (int i = 0; i < navItems.length; i++) {
@@ -802,7 +766,6 @@ public class MainActivity extends AppCompatActivity {
                 else if (idx == 1) showVPNScreen();
                 else if (idx == 2) startActivity(new Intent(this, GeminiChatActivity.class));
                 else if (idx == 3) startActivity(new Intent(this, SecurityScannerActivity.class));
-                else Toast.makeText(this, "Настройки — скоро", Toast.LENGTH_SHORT).show();
             });
         }
         rootLayout.addView(nav);
@@ -815,21 +778,18 @@ public class MainActivity extends AppCompatActivity {
         item.setGravity(Gravity.CENTER);
         item.setPadding(dp(8), dp(5), dp(8), dp(5));
         item.setOnClickListener(listener);
-
         TextView icon = new TextView(this);
         icon.setText(parts[0]);
         icon.setTextSize(active ? 22 : 20);
         icon.setTextColor(Color.parseColor(active ? "#B9BE8A" : "#4A4B2F"));
         icon.setGravity(Gravity.CENTER);
         icon.setTypeface(null, Typeface.BOLD);
-
         TextView label = new TextView(this);
         label.setText(parts[1]);
         label.setTextColor(Color.parseColor(active ? "#B9BE8A" : "#666844"));
         label.setTextSize(10);
         label.setPadding(0, dp(3), 0, 0);
         label.setGravity(Gravity.CENTER);
-
         if (active) {
             View dot = new View(this);
             GradientDrawable dotBg = new GradientDrawable();
@@ -846,7 +806,6 @@ public class MainActivity extends AppCompatActivity {
             item.addView(icon);
             item.addView(label);
         }
-
         parent.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
     }
 

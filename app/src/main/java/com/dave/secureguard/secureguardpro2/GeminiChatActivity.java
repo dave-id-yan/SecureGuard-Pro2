@@ -4,7 +4,6 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
@@ -29,15 +28,18 @@ import java.util.concurrent.Executors;
 
 public class GeminiChatActivity extends AppCompatActivity {
 
-
     private static final String SYSTEM_PROMPT = "Ты — AI-ассистент по интернет-безопасности в приложении SecureGuard Pro. " +
-            "Твоя задача — обучать пользователей интернет-гигиене и безопасности на понятных примерах из жизни. " +
-            "Объясняй простым языком: что такое фишинг, как создавать безопасные пароли, как распознать мошенников, " +
-            "как защитить личные данные, что такое VPN и зачем он нужен, как безопасно пользоваться Wi-Fi. " +
-            "Давай конкретные советы и примеры. Отвечай на русском языке. " +
-            "Будь дружелюбным наставником, не используй сложные технические термины без объяснений. " +
-            "Если пользователь описывает подозрительную ситуацию — помоги разобраться, это мошенничество или нет.";
+            "ПРАВИЛО ОТВЕТОВ: Всегда отвечай КОРОТКО и по делу — 1-4 предложения максимум. " +
+            "НЕ пиши длинные лекции. Только суть + один конкретный совет. " +
+            "Если вопрос сложный — дай краткий ответ и предложи уточнить детали. " +
+            "Если пользователь САМ попросит подробности или напишет 'расскажи подробнее' / 'объясни детально' — тогда можно написать развёрнуто. " +
+            "Стиль: дружелюбный, без терминов без объяснений, на русском языке. " +
+            "Темы: фишинг, пароли, VPN, Wi-Fi безопасность, мошенничество, защита данных. " +
+            "Если описывают подозрительную ситуацию — коротко скажи да/нет это мошенничество + один совет что делать.";
 
+    private static final String API_KEY = BuildConfig.OPENROUTER_API_KEY;
+    private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
+    private static final String MODEL   = "google/gemini-2.0-flash-001";
     private LinearLayout messagesContainer;
     private ScrollView scrollView;
     private EditText inputField;
@@ -244,32 +246,46 @@ public class GeminiChatActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
 
         try {
+            // Добавляем сообщение пользователя в историю
+            JSONObject userHistoryMsg = new JSONObject();
+            userHistoryMsg.put("role", "user");
+            userHistoryMsg.put("content", userMessage);
+            conversationHistory.add(userHistoryMsg);
+
+            // Ограничиваем историю — последние 20 сообщений чтобы не превышать лимит токенов
+            if (conversationHistory.size() > 20) {
+                conversationHistory.remove(0);
+            }
+
+            // Сборка запроса в формате OpenAI-совместимого API
             JSONObject requestBody = new JSONObject();
+            requestBody.put("model", MODEL);
 
-            JSONArray contents = new JSONArray();
-            JSONObject msg = new JSONObject();
-            msg.put("role", "user");
-            JSONArray parts = new JSONArray();
-            JSONObject part = new JSONObject();
-            part.put("text", SYSTEM_PROMPT + "\n\nВопрос пользователя: " + userMessage);
-            parts.put(part);
-            msg.put("parts", parts);
-            contents.put(msg);
-            requestBody.put("contents", contents);
+            JSONArray messages = new JSONArray();
 
-            // Минимальные настройки
-            JSONObject genConfig = new JSONObject();
-            genConfig.put("temperature", 1.0);
-            requestBody.put("generationConfig", genConfig);
+            // Системный промпт
+            JSONObject systemMsg = new JSONObject();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", SYSTEM_PROMPT);
+            messages.put(systemMsg);
+
+            // Вся история разговора (включает текущее сообщение)
+            for (JSONObject msg : conversationHistory) {
+                messages.put(msg);
+            }
+
+            requestBody.put("messages", messages);
 
             URL url = new URL(API_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Authorization", "Bearer " + API_KEY);
+            conn.setRequestProperty("HTTP-Referer", "https://github.com/"); // рекомендует OpenRouter
             conn.setDoOutput(true);
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(40000);
+// ... дальше всё как было ...
 
             byte[] body = requestBody.toString().getBytes("UTF-8");
             conn.setRequestProperty("Content-Length", String.valueOf(body.length));
@@ -295,12 +311,17 @@ public class GeminiChatActivity extends AppCompatActivity {
 
             if (responseCode == 200) {
                 JSONObject json = new JSONObject(sb.toString());
-                return json.getJSONArray("candidates")
+                // OpenRouter возвращает формат OpenAI:
+                String assistantReply = json.getJSONArray("choices")
                         .getJSONObject(0)
-                        .getJSONObject("content")
-                        .getJSONArray("parts")
-                        .getJSONObject(0)
-                        .getString("text");
+                        .getJSONObject("message")
+                        .getString("content");
+                // Добавляем ответ ассистента в историю
+                JSONObject assistantMsg = new JSONObject();
+                assistantMsg.put("role", "assistant");
+                assistantMsg.put("content", assistantReply);
+                conversationHistory.add(assistantMsg);
+                return assistantReply;
             } else if (responseCode == 429) {
                 android.util.Log.e("Gemini", "429 body: " + sb.toString());
                 return "Ошибка 429: " + sb.toString().substring(0, Math.min(200, sb.length()));
