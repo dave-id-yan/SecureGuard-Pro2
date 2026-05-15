@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.dave.secureguard.secureguardpro2">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:allowBackup="true"
@@ -16,7 +15,7 @@
         android:label="SecureGuard Pro"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
         <activity
             android:name=".MainActivity"
@@ -28,32 +27,11 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".GeminiChatActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".SecurityScannerActivity"
-            android:exported="false" />
-
-        <service
-            android:name=".VPNService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name=".AdBlockerService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-        </service>
+        <activity android:name=".GeminiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".SecurityScannerActivity" android:exported="false" />
+        <activity android:name=".QRScannerActivity" android:exported="false" android:screenOrientation="portrait" tools:ignore="LockedOrientationActivity" />
+        <activity android:name=".Urlcheckeractivity" android:exported="false" />
+        <activity android:name=".Antispyactivity" android:exported="false" />
 
     </application>
 
