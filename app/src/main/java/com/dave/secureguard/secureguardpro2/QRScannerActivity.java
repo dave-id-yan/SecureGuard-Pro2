@@ -13,10 +13,10 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -29,16 +29,17 @@ import com.google.zxing.integration.android.IntentResult;
 
 import org.json.JSONObject;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import okhttp3.FormBody;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class QRScannerActivity extends AppCompatActivity {
 
@@ -55,12 +56,15 @@ public class QRScannerActivity extends AppCompatActivity {
     static final String C_MUTED   = "#82855A";
     
     private ProgressBar progressBar;
-    private ExecutorService executor = Executors.newSingleThreadExecutor();
-    private OkHttpClient http = new OkHttpClient();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final OkHttpClient http = new OkHttpClient();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor(C_BG));
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
@@ -73,7 +77,7 @@ public class QRScannerActivity extends AppCompatActivity {
                 new int[]{Color.parseColor(C_MID), Color.parseColor(C_CARD)}));
 
         TextView backBtn = makeBackBtn();
-        backBtn.setOnClickListener(v -> finish());
+        backBtn.setOnClickListener(v -> goHome());
 
         TextView title = new TextView(this);
         title.setText("▣ QR Сканер");
@@ -88,7 +92,7 @@ public class QRScannerActivity extends AppCompatActivity {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER);
-        content.setPadding(dp(30), dp(30), dp(30), dp(30));
+        content.setPadding(dp(30), dp(30), dp(30), dp(115));
 
         TextView info = new TextView(this);
         info.setText("Наведите камеру на QR-код для глубокого анализа содержимого");
@@ -97,7 +101,7 @@ public class QRScannerActivity extends AppCompatActivity {
         info.setGravity(Gravity.CENTER);
         info.setPadding(0, 0, 0, dp(40));
 
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleLarge);
+        progressBar = new ProgressBar(this);
         progressBar.setVisibility(View.GONE);
 
         TextView scanBtn = new TextView(this);
@@ -120,7 +124,22 @@ public class QRScannerActivity extends AppCompatActivity {
         main.addView(header);
         main.addView(content, new LinearLayout.LayoutParams(-1, -1));
 
-        setContentView(main);
+        root.addView(main);
+        MainActivity.addBottomNav(root, -1, this);
+
+        setContentView(root);
+    }
+
+    private void goHome() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
+    }
+
+    @Override
+    public void onBackPressed() {
+        goHome();
     }
 
     private void checkPermissionAndScan() {
@@ -157,10 +176,11 @@ public class QRScannerActivity extends AppCompatActivity {
         if (low.startsWith("http")) {
             progressBar.setVisibility(View.VISIBLE);
             executor.execute(() -> {
-                String[] res = scanUrl(contents);
+                String finalUrl = resolveRedirects(contents);
+                String[] res = scanUrl(finalUrl);
                 new Handler(Looper.getMainLooper()).post(() -> {
                     progressBar.setVisibility(View.GONE);
-                    showResult(res[0], res[1], contents);
+                    showResult(res[0], res[1], finalUrl);
                 });
             });
         } else {
@@ -168,100 +188,118 @@ public class QRScannerActivity extends AppCompatActivity {
         }
     }
 
+    private String resolveRedirects(String startUrl) {
+        String currentUrl = startUrl;
+        try {
+            for (int i = 0; i < 15; i++) { // Increased redirect limit
+                HttpURLConnection conn = (HttpURLConnection) new URL(currentUrl).openConnection();
+                conn.setInstanceFollowRedirects(false);
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                conn.setRequestMethod("HEAD");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile)");
+                int code = conn.getResponseCode();
+                if (code >= 300 && code < 400) {
+                    String loc = conn.getHeaderField("Location");
+                    conn.disconnect();
+                    if (loc == null || loc.isEmpty()) break;
+                    if (!loc.startsWith("http")) {
+                        loc = new URL(new URL(currentUrl), loc).toString();
+                    }
+                    currentUrl = loc;
+                } else {
+                    conn.disconnect();
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Redirect error", e);
+        }
+        return currentUrl;
+    }
+
     private String[] scanUrl(String url) {
         try {
-            // 1. Try existing report
             String enc = android.util.Base64.encodeToString(url.getBytes(), android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING).replace("=", "");
             Request req = new Request.Builder().url(VT_SCAN_URL + "/" + enc).addHeader("x-apikey", VT_API_KEY).build();
             try (Response resp = http.newCall(req).execute()) {
-                if (resp.isSuccessful()) return parseVT(resp.body().string());
+                ResponseBody body = resp.body();
+                if (resp.isSuccessful() && body != null) return parseVT(body.string());
             }
 
-            // 2. Submit for scan if not found
-            FormBody formBody = new FormBody.Builder().add("url", url).build();
-            Request post = new Request.Builder().url(VT_SCAN_URL).addHeader("x-apikey", VT_API_KEY).post(formBody).build();
-            
+            FormBody postBody = new FormBody.Builder().add("url", url).build();
+            Request post = new Request.Builder().url(VT_SCAN_URL).addHeader("x-apikey", VT_API_KEY).post(postBody).build();
             try (Response resp = http.newCall(post).execute()) {
-                if (resp.isSuccessful()) {
-                    String aid = new JSONObject(resp.body().string()).getJSONObject("data").getString("id");
-                    // 3. Polling
-                    for (int i = 0; i < 12; i++) {
-                        Thread.sleep(5000);
-                        Request p = new Request.Builder().url(VT_REPORT_URL + aid).addHeader("x-apikey", VT_API_KEY).build();
-                        try (Response pr = http.newCall(p).execute()) {
-                            if (pr.isSuccessful()) {
-                                String j = pr.body().string();
-                                JSONObject data = new JSONObject(j).getJSONObject("data");
-                                if (data.getJSONObject("attributes").getString("status").equals("completed")) {
-                                    return parseVT(j);
-                                }
+                ResponseBody body = resp.body();
+                if (resp.isSuccessful() && body != null) {
+                    String aid = new JSONObject(body.string()).getJSONObject("data").getString("id");
+                    for (int i = 0; i < 15; i++) {
+                        Thread.sleep(3000);
+                        Request poll = new Request.Builder().url(VT_REPORT_URL + aid).addHeader("x-apikey", VT_API_KEY).build();
+                        try (Response pollResp = http.newCall(poll).execute()) {
+                            ResponseBody pollBody = pollResp.body();
+                            if (pollResp.isSuccessful() && pollBody != null) {
+                                String json = pollBody.string();
+                                JSONObject data = new JSONObject(json).getJSONObject("data");
+                                if (data.getJSONObject("attributes").getString("status").equals("completed")) return parseVT(json);
+                                JSONObject stats = data.getJSONObject("attributes").getJSONObject("stats");
+                                if (stats.getInt("malicious") > 0 || stats.getInt("suspicious") > 0) return parseVT(json);
                             }
                         }
                     }
                 }
             }
             return localCheck(url);
-        } catch (Exception e) {
-            Log.e(TAG, "Scan error", e);
-            return localCheck(url);
-        }
+        } catch (Exception e) { return localCheck(url); }
     }
 
     private String[] parseVT(String json) {
         try {
-            JSONObject obj = new JSONObject(json);
-            JSONObject attrs = obj.getJSONObject("data").getJSONObject("attributes");
-            JSONObject stats = attrs.has("last_analysis_stats") ? attrs.getJSONObject("last_analysis_stats") : attrs.getJSONObject("stats");
-            
-            int mal = stats.getInt("malicious");
-            int susp = stats.getInt("suspicious");
-            
-            if (mal > 0 || susp > 0) {
-                StringBuilder details = new StringBuilder("Обнаружено: ");
-                JSONObject results = attrs.getJSONObject("results");
+            JSONObject attr = new JSONObject(json).getJSONObject("data").getJSONObject("attributes");
+            JSONObject st = attr.has("last_analysis_stats") ? attr.getJSONObject("last_analysis_stats") : attr.getJSONObject("stats");
+            int m = st.getInt("malicious"), s = st.getInt("suspicious");
+            if (m > 0 || s > 0) {
+                StringBuilder sb = new StringBuilder("Угроза! Найдено опасностей: ");
+                JSONObject results = attr.getJSONObject("results");
                 Iterator<String> keys = results.keys();
                 int count = 0;
-                while (keys.hasNext() && count < 3) {
-                    String key = keys.next();
-                    JSONObject res = results.getJSONObject(key);
-                    if (res.getString("category").equals("malicious") || res.getString("category").equals("suspicious")) {
-                        details.append(key).append(", ");
+                while (keys.hasNext() && count < 6) {
+                    String k = keys.next();
+                    JSONObject r = results.getJSONObject(k);
+                    if (r.getString("category").equals("malicious") || r.getString("category").equals("suspicious")) {
+                        sb.append(k).append(" (").append(r.optString("result", "danger")).append("), ");
                         count++;
                     }
                 }
-                String detailStr = details.toString().replaceAll(", $", "");
-                return new String[]{"DANGER", (mal > 0 ? "ОПАСНО! " : "ВНИМАНИЕ! ") + detailStr};
+                return new String[]{"DANGER", sb.toString().replaceAll(", $", "")};
             }
-            return new String[]{"SAFE", "Угроз не обнаружено. Ссылка безопасна по мнению 70+ антивирусов."};
-        } catch (Exception e) { 
-            return new String[]{"SAFE", "Чисто"}; 
-        }
+            return new String[]{"SAFE", "Угроз не обнаружено. Ссылка безопасна."};
+        } catch (Exception e) { return new String[]{"SAFE", "Чисто"}; }
     }
 
     private String[] localCheck(String url) {
         String l = url.toLowerCase();
-        if (l.contains("phish") || l.contains("malware") || l.contains("virus") || 
-            l.contains(".apk") || l.contains(".exe") || l.contains("win-prize") ||
-            l.contains("bit.ly") || l.contains("t.co") || l.matches(".*\\d+\\.\\d+\\.\\d+\\.\\d+.*")) {
-            return new String[]{"DANGER", "Локальный фильтр: Высокий риск фишинга или вредоносного ПО!"};
+        String[] keywords = {"phish", "malware", "virus", ".apk", ".exe", "bit.ly", "t.co", "tinyurl", "login", "verify", "secure", "bank", "update", "free", "gift", "prize", "win", "claim", "bonus", "crypto", "stealer", "trojan"};
+        for (String kw : keywords) {
+            if (l.contains(kw)) return new String[]{"DANGER", "Локальный фильтр: Подозрительная ссылка (" + kw + ")"};
         }
-        return new String[]{"SAFE", "Локальная проверка: Угроз не найдено"};
+        if (l.matches(".*\\d+\\.\\d+\\.\\d+\\.\\d+.*")) return new String[]{"DANGER", "Локальный фильтр: Прямой IP адрес (риск фишинга)"};
+        return new String[]{"SAFE", "Локальная проверка: Чисто"};
     }
 
     private void showResult(String status, String msg, String content) {
         AlertDialog.Builder b = new AlertDialog.Builder(this);
-        b.setTitle(status.equals("DANGER") ? "🚨 УГРОЗА ОБНАРУЖЕНА!" : status.equals("WARN") ? "⚠️ ВНИМАНИЕ" : "✅ ПРОВЕРЕНО");
-        
-        String fullMsg = msg + "\n\nСодержимое:\n" + content;
-        b.setMessage(fullMsg);
-        
-        if (status.equals("SAFE") && content.toLowerCase().startsWith("http")) {
-            b.setPositiveButton("Открыть ссылку", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(content))));
-        } else if (status.equals("DANGER")) {
-            b.setMessage("ОПАСНОСТЬ: " + fullMsg + "\n\nМЫ НЕ РЕКОМЕНДУЕМ ОТКРЫВАТЬ ЭТУ ССЫЛКУ.");
-            b.setPositiveButton("ВСЕ РАВНО ОТКРЫТЬ", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(content))));
+        b.setTitle(status.equals("DANGER") ? "🚨 УГРОЗА ОБНАРУЖЕНА!" : "✅ ПРОВЕРЕНО");
+        b.setMessage(msg + "\n\nКонечная ссылка:\n" + content);
+        if (content.toLowerCase().startsWith("http")) {
+            b.setPositiveButton(status.equals("DANGER") ? "ВСЕ РАВНО ОТКРЫТЬ" : "Открыть", (d, w) -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(content)));
+                } catch (Exception e) {
+                    Log.e(TAG, "Error opening link", e);
+                }
+            });
         }
-        
         b.setNegativeButton("Закрыть", null);
         b.show();
     }
@@ -270,10 +308,13 @@ public class QRScannerActivity extends AppCompatActivity {
         TextView b = new TextView(this);
         b.setText("←");
         b.setGravity(Gravity.CENTER);
+        b.setIncludeFontPadding(false);
+        b.setPadding(0, 0, 0, dp(5)); 
+        b.setTextSize(26);
         b.setTextColor(Color.parseColor(C_OLIVE));
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
-        g.setColor(Color.parseColor("#22B9BE8A"));
+        g.setColor(Color.parseColor("#33B9BE8A"));
         b.setBackground(g);
         return b;
     }

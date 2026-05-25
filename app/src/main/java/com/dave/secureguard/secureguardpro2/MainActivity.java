@@ -1,6 +1,7 @@
 package com.dave.secureguard.secureguardpro2;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -41,7 +42,7 @@ public class MainActivity extends AppCompatActivity {
         rootLayout.setBackgroundColor(Color.parseColor(C_BG));
 
         showMainScreen();
-        createBottomNavigation();
+        addBottomNav(rootLayout, 0);
         setContentView(rootLayout);
 
         viewModel.securityScore.observe(this, score -> {
@@ -49,6 +50,17 @@ public class MainActivity extends AppCompatActivity {
             securityScoreText.setText(score == -1 ? "?" : score + "%");
             if (score != -1) updateScoreCircle(score);
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Load saved score from preferences when returning to main screen
+        SharedPreferences prefs = getSharedPreferences("security_prefs", MODE_PRIVATE);
+        int savedScore = prefs.getInt("last_score", -1);
+        if (savedScore != -1) {
+            viewModel.onSecurityScoreUpdated(savedScore);
+        }
     }
 
     private void showMainScreen() {
@@ -258,12 +270,19 @@ public class MainActivity extends AppCompatActivity {
         mainContainer.addView(tv);
     }
 
-    private void createBottomNavigation() {
-        LinearLayout nav = new LinearLayout(this);
-        nav.setBackgroundColor(Color.parseColor(C_NAV));
-        nav.setPadding(0, dp(10), 0, dp(15));
+    // ── Единый метод нижней навигации ──────────────────────────────────────
+    static void addBottomNav(FrameLayout root, int activeTab, android.app.Activity activity) {
+        String C_NAV_LOCAL  = "#1A1B10";
+        String C_ACTIVE     = "#B9BE8A";
+        String C_INACTIVE   = "#4A4B2F";
+
+        LinearLayout nav = new LinearLayout(activity);
+        nav.setBackgroundColor(Color.parseColor(C_NAV_LOCAL));
+        nav.setPadding(0, Math.round(10 * activity.getResources().getDisplayMetrics().density),
+                0, Math.round(15 * activity.getResources().getDisplayMetrics().density));
         nav.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, dp(85), Gravity.BOTTOM);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                -1, Math.round(85 * activity.getResources().getDisplayMetrics().density), Gravity.BOTTOM);
         nav.setLayoutParams(lp);
 
         String[] labels  = {"Главная", "AI Чат", "Сканер"};
@@ -271,35 +290,54 @@ public class MainActivity extends AppCompatActivity {
 
         for (int i = 0; i < 3; i++) {
             final int idx = i;
-            LinearLayout item = new LinearLayout(this);
+            boolean isActive = (idx == activeTab);
+
+            LinearLayout item = new LinearLayout(activity);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
-            
-            TextView ic = new TextView(this);
+
+            TextView ic = new TextView(activity);
             ic.setText(symbols[i]);
-            ic.setTextColor(Color.parseColor(C_OLIVE));
+            ic.setTextColor(Color.parseColor(isActive ? C_ACTIVE : C_INACTIVE));
             ic.setTextSize(22);
             ic.setGravity(Gravity.CENTER);
-            
-            TextView lb = new TextView(this);
+
+            TextView lb = new TextView(activity);
             lb.setText(labels[i]);
-            lb.setTextColor(Color.parseColor(C_MUTED));
+            lb.setTextColor(Color.parseColor(isActive ? C_ACTIVE : C_INACTIVE));
             lb.setTextSize(11);
-            lb.setPadding(0, dp(2), 0, 0);
+            lb.setPadding(0, Math.round(2 * activity.getResources().getDisplayMetrics().density), 0, 0);
             lb.setGravity(Gravity.CENTER);
-            
-            item.addView(ic, new LinearLayout.LayoutParams(-1, -2));
-            item.addView(lb, new LinearLayout.LayoutParams(-1, -2));
-            item.setOnClickListener(v -> {
-                if (idx == 0) showMainScreen();
-                else if (idx == 1) startActivity(new Intent(this, GeminiChatActivity.class));
-                else startActivity(new Intent(this, SecurityScannerActivity.class));
-            });
-            
+            if (isActive) lb.setTypeface(null, Typeface.BOLD);
+
+            item.addView(ic,  new LinearLayout.LayoutParams(-1, -2));
+            item.addView(lb,  new LinearLayout.LayoutParams(-1, -2));
+
+            if (!isActive) {
+                item.setOnClickListener(v -> {
+                    if (idx == 0) {
+                        Intent intent = new Intent(activity, MainActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        activity.startActivity(intent);
+                        activity.finish();
+                    } else if (idx == 1) {
+                        activity.startActivity(new Intent(activity, GeminiChatActivity.class));
+                        activity.finish();
+                    } else {
+                        activity.startActivity(new Intent(activity, SecurityScannerActivity.class));
+                        activity.finish();
+                    }
+                });
+            }
+
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(0, -1, 1);
             nav.addView(item, itemLp);
         }
-        rootLayout.addView(nav);
+        root.addView(nav);
+    }
+
+    private void addBottomNav(FrameLayout root, int activeTab) {
+        addBottomNav(root, activeTab, this);
     }
 
     private void updateScoreCircle(int score) {

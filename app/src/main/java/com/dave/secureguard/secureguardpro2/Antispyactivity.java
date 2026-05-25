@@ -6,17 +6,20 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
+import android.app.Dialog;
+import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -24,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 
 public class Antispyactivity extends AppCompatActivity {
 
@@ -50,13 +52,16 @@ public class Antispyactivity extends AppCompatActivity {
     }
 
     private void buildUI() {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor(C_BG));
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(Color.parseColor(C_BG));
 
         mainContainer = new LinearLayout(this);
         mainContainer.setOrientation(LinearLayout.VERTICAL);
-        mainContainer.setPadding(0, 0, 0, dp(30));
+        mainContainer.setPadding(0, 0, 0, dp(115));
 
         buildHeader();
         buildStatusCard();
@@ -64,7 +69,11 @@ public class Antispyactivity extends AppCompatActivity {
         buildResultsSection();
 
         scroll.addView(mainContainer);
-        setContentView(scroll);
+        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+
+        MainActivity.addBottomNav(root, -1, this);
+
+        setContentView(root);
     }
 
     private void buildHeader() {
@@ -77,7 +86,7 @@ public class Antispyactivity extends AppCompatActivity {
         header.setBackground(bg);
 
         TextView back = makeBackBtn();
-        back.setOnClickListener(v -> finish());
+        back.setOnClickListener(v -> goHome());
 
         LinearLayout titleBlock = new LinearLayout(this);
         titleBlock.setOrientation(LinearLayout.VERTICAL);
@@ -86,7 +95,7 @@ public class Antispyactivity extends AppCompatActivity {
         titleBlock.setLayoutParams(tbp);
 
         TextView title = new TextView(this);
-        title.setText("🛡 Anti-Spy Глубокий Анализ");
+        title.setText("🛡 Anti-Spy Анализ");
         title.setTextColor(Color.parseColor(C_OLIVE));
         title.setTextSize(20);
         title.setTypeface(null, Typeface.BOLD);
@@ -99,9 +108,21 @@ public class Antispyactivity extends AppCompatActivity {
         titleBlock.addView(title);
         titleBlock.addView(sub);
 
-        header.addView(back, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
         header.addView(titleBlock);
         mainContainer.addView(header);
+    }
+
+    private void goHome() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
+    }
+
+    @Override
+    public void onBackPressed() {
+        goHome();
     }
 
     private void buildStatusCard() {
@@ -137,7 +158,7 @@ public class Antispyactivity extends AppCompatActivity {
 
     private void buildScanBtn() {
         scanBtn = new TextView(this);
-        scanBtn.setText("⚡ Запустить Глубокий Поиск");
+        scanBtn.setText("⚡ Начать глубокий поиск");
         scanBtn.setTextColor(Color.BLACK);
         scanBtn.setGravity(Gravity.CENTER);
         scanBtn.setPadding(0, dp(15), 0, dp(15));
@@ -168,7 +189,7 @@ public class Antispyactivity extends AppCompatActivity {
         scanBtn.setAlpha(0.5f);
 
         executor.execute(() -> {
-            List<String[]> results = scanApps();
+            List<SpyScanResult> results = scanApps();
             try { Thread.sleep(1500); } catch (Exception e) {}
             mainHandler.post(() -> {
                 progressBar.setVisibility(View.GONE);
@@ -179,68 +200,51 @@ public class Antispyactivity extends AppCompatActivity {
         });
     }
 
-    private static final String[] TRUSTED_PREFIXES = {
-            "com.samsung.", "com.sec.", "com.android.", "android.",
-            "com.google.", "com.qualcomm.", "com.lge.", "com.motorola.",
-            "com.htc.", "com.oneplus.", "com.huawei.", "com.miui.",
-            "com.xiaomi.", "com.oppo.", "com.realme.", "com.vivo.",
-            "com.oplus.", "com.asus.", "com.sony.", "com.sonyericsson.",
-            "com.mediatek.", "com.spreadtrum.", "com.transsion."
-    };
-
-    private boolean isTrustedPackage(String packageName) {
-        for (String prefix : TRUSTED_PREFIXES) {
-            if (packageName.startsWith(prefix)) return true;
-        }
-        return false;
-    }
-
-    private List<String[]> scanApps() {
-        List<String[]> list = new ArrayList<>();
+    private List<SpyScanResult> scanApps() {
+        List<SpyScanResult> list = new ArrayList<>();
         PackageManager pm = getPackageManager();
         List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS);
 
         for (PackageInfo pkg : packages) {
             if ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
-            if ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) continue;
             if (pkg.packageName.equals(getPackageName())) continue;
-            if (isTrustedPackage(pkg.packageName)) continue;
             if (pkg.requestedPermissions == null) continue;
 
-            StringBuilder sb = new StringBuilder();
-            int riskLevel = 0;
+            List<String> foundPerms = new ArrayList<>();
+            int risk = 0;
             for (String perm : pkg.requestedPermissions) {
-                if (perm.contains("CAMERA"))              { sb.append("📷 "); riskLevel += 2; }
-                if (perm.contains("RECORD_AUDIO"))        { sb.append("🎙 "); riskLevel += 2; }
-                if (perm.contains("LOCATION"))            { sb.append("📍 "); riskLevel += 1; }
-                if (perm.contains("READ_SMS"))            { sb.append("💬 "); riskLevel += 3; }
-                if (perm.contains("READ_CONTACTS"))       { sb.append("👥 "); riskLevel += 1; }
-                if (perm.contains("SYSTEM_ALERT_WINDOW")) { sb.append("🖼 "); riskLevel += 4; }
+                if (perm.contains("CAMERA"))              { foundPerms.add("Камера"); risk += 2; }
+                if (perm.contains("RECORD_AUDIO"))        { foundPerms.add("Микрофон"); risk += 2; }
+                if (perm.contains("LOCATION"))            { foundPerms.add("Геолокация"); risk += 1; }
+                if (perm.contains("READ_SMS"))            { foundPerms.add("SMS"); risk += 3; }
+                if (perm.contains("READ_CONTACTS"))       { foundPerms.add("Контакты"); risk += 1; }
+                if (perm.contains("SYSTEM_ALERT_WINDOW")) { foundPerms.add("Поверх окон"); risk += 4; }
+                if (perm.contains("PROCESS_OUTGOING_CALLS")) { foundPerms.add("Звонки"); risk += 3; }
             }
 
-            if (riskLevel >= 6) {
+            if (risk >= 5) {
                 String appName = pm.getApplicationLabel(pkg.applicationInfo).toString();
-                list.add(new String[]{appName, pkg.packageName, sb.toString(), String.valueOf(riskLevel)});
+                list.add(new SpyScanResult(appName, pkg.packageName, foundPerms, risk));
             }
         }
-        list.sort((a, b) -> Integer.compare(Integer.parseInt(b[3]), Integer.parseInt(a[3])));
+        list.sort((a, b) -> Integer.compare(b.riskLevel, a.riskLevel));
         return list;
     }
 
-    private void displayResults(List<String[]> results) {
+    private void displayResults(List<SpyScanResult> results) {
         if (results.isEmpty()) {
             statusText.setText("✅ Угроз не обнаружено");
-            statusText.setTextColor(Color.parseColor("#6BBF59"));
+            statusText.setTextColor(Color.parseColor("#B9BE8A"));
         } else {
-            statusText.setText("⚠️ Найдено " + results.size() + " потенциальных угроз");
+            statusText.setText("⚠️ Найдено " + results.size() + " угроз");
             statusText.setTextColor(Color.parseColor("#C85A4B"));
-            for (String[] r : results) {
-                addAppRow(r[0], r[1], r[2], Integer.parseInt(r[3]));
+            for (SpyScanResult r : results) {
+                addAppRow(r);
             }
         }
     }
 
-    private void addAppRow(String name, String pkg, String icons, int risk) {
+    private void addAppRow(SpyScanResult r) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(15), dp(15), dp(15), dp(15));
@@ -250,40 +254,98 @@ public class Antispyactivity extends AppCompatActivity {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor(C_CARD));
         bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), risk >= 9 ? Color.parseColor("#C85A4B") : Color.parseColor(C_STROKE));
+        bg.setStroke(dp(1), r.riskLevel >= 8 ? Color.parseColor("#C85A4B") : Color.parseColor(C_STROKE));
         row.setBackground(bg);
 
         TextView title = new TextView(this);
-        title.setText(name);
+        title.setText(r.appName);
         title.setTextColor(Color.parseColor(C_OLIVE));
         title.setTypeface(null, Typeface.BOLD);
         title.setTextSize(15);
 
         TextView sub = new TextView(this);
-        sub.setText("Доступ к: " + icons);
+        sub.setText("Доступы: " + String.join(", ", r.permissions));
         sub.setTextColor(Color.parseColor(C_MUTED));
         sub.setPadding(0, dp(4), 0, 0);
 
-        TextView riskText = new TextView(this);
-        riskText.setText("Уровень риска: " + (risk >= 9 ? "ВЫСОКИЙ" : "СРЕДНИЙ"));
-        riskText.setTextColor(risk >= 9 ? Color.parseColor("#C85A4B") : Color.parseColor("#C8A84B"));
-        riskText.setTextSize(10);
-        riskText.setPadding(0, dp(4), 0, 0);
-
         row.addView(title);
         row.addView(sub);
-        row.addView(riskText);
+        row.setOnClickListener(v -> showFixDialog(r));
         resultsContainer.addView(row);
+    }
+
+    private void showFixDialog(SpyScanResult r) {
+        Dialog dialog = new Dialog(this);
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(24), dp(24), dp(24));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(C_CARD));
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(2), Color.parseColor(r.riskLevel >= 8 ? "#C85A4B" : "#C8A84B"));
+        content.setBackground(bg);
+
+        TextView title = new TextView(this);
+        title.setText(r.appName);
+        title.setTextColor(Color.parseColor(C_OLIVE));
+        title.setTextSize(18);
+        title.setTypeface(null, Typeface.BOLD);
+
+        TextView desc = new TextView(this);
+        desc.setText("Приложение имеет доступ к важным функциям: " + String.join(", ", r.permissions) + ". Это может быть использовано для скрытой слежки за вами.");
+        desc.setTextColor(Color.WHITE);
+        desc.setPadding(0, dp(10), 0, dp(15));
+
+        TextView fixTitle = new TextView(this);
+        fixTitle.setText("Рекомендация:");
+        fixTitle.setTextColor(Color.parseColor(C_MUTED));
+        fixTitle.setTypeface(null, Typeface.BOLD);
+
+        TextView fixDesc = new TextView(this);
+        fixDesc.setText("Если вы не доверяете этому приложению, немедленно удалите его или ограничьте доступы в настройках системы.");
+        fixDesc.setTextColor(Color.parseColor(C_MUTED));
+
+        TextView close = new TextView(this);
+        close.setText("Понятно");
+        close.setGravity(Gravity.CENTER);
+        close.setPadding(0, dp(14), 0, dp(14));
+        close.setTextColor(Color.BLACK);
+        close.setTypeface(null, Typeface.BOLD);
+        GradientDrawable btn = new GradientDrawable();
+        btn.setColor(Color.parseColor(C_OLIVE));
+        btn.setCornerRadius(dp(12));
+        close.setBackground(btn);
+        close.setOnClickListener(v -> dialog.dismiss());
+        
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+        clp.setMargins(0, dp(24), 0, 0);
+
+        content.addView(title);
+        content.addView(desc);
+        content.addView(fixTitle);
+        content.addView(fixDesc);
+        content.addView(close, clp);
+
+        dialog.setContentView(content);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.9), WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+        dialog.show();
     }
 
     private TextView makeBackBtn() {
         TextView b = new TextView(this);
         b.setText("←");
         b.setGravity(Gravity.CENTER);
+        b.setIncludeFontPadding(false);
+        b.setPadding(0, 0, 0, dp(5)); 
+        b.setTextSize(26);
         b.setTextColor(Color.parseColor(C_OLIVE));
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
-        g.setColor(Color.parseColor("#22B9BE8A"));
+        g.setColor(Color.parseColor("#33B9BE8A"));
         b.setBackground(g);
         return b;
     }
@@ -294,5 +356,14 @@ public class Antispyactivity extends AppCompatActivity {
     protected void onDestroy() {
         executor.shutdown();
         super.onDestroy();
+    }
+
+    static class SpyScanResult {
+        String appName, packageName;
+        List<String> permissions;
+        int riskLevel;
+        SpyScanResult(String n, String p, List<String> perms, int r) {
+            appName = n; packageName = p; permissions = perms; riskLevel = r;
+        }
     }
 }

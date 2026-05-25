@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SecureGuard Pro2</string>
+    <string name="back">Назад</string>
+    <string name="main_title">SecureGuard Ultra</string>
+    <string name="main_subtitle">Комплексная киберзащита</string>
+    <string name="scan_device">Сканировать устройство</string>
+    <string name="ai_advisor">AI Советник</string>
+    <string name="ai_desc">Задай вопрос безопасности</string>
+    <string name="analysis_section">Анализ и Сканирование</string>
+    <string name="protection_section">Защита и Конфиденциальность</string>
+    
+    <string name="feature_scanner">Сканер</string>
+    <string name="feature_qr">QR Код</string>
+    <string name="feature_url">VirusTotal URL</string>
+    <string name="feature_applock">App Lock</string>
+    <string name="feature_antispy">Anti-Spy</string>
+    <string name="feature_encryption">Шифрование</string>
+    <string name="feature_passwords">Пароли</string>
+    
+    <string name="nav_home">Главная</string>
+    <string name="nav_ai">AI Чат</string>
+    <string name="nav_scanner">Сканер</string>
+    
+    <string name="accessibility_service_desc">Требуется для блокировки и защиты приложений в реальном времени.</string>
+    <string name="permission_required">Требуется разрешение</string>
+</resources>

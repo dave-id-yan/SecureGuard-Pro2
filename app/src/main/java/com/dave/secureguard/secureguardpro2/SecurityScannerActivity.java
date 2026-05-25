@@ -1,21 +1,24 @@
 package com.dave.secureguard.secureguardpro2;
 
 import android.Manifest;
+import android.app.Dialog;
 import android.app.KeyguardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -43,46 +46,47 @@ public class SecurityScannerActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#12120A"));
+
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(Color.parseColor("#12120A"));
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
-        main.setPadding(0, 0, 0, dp(30));
+        main.setPadding(0, 0, 0, dp(115));
 
         // Header
         LinearLayout header = new LinearLayout(this);
         header.setPadding(dp(20), dp(50), dp(20), dp(20));
         header.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable headerBg = new GradientDrawable(
+        header.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
-        header.setBackground(headerBg);
+                new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")}));
 
         TextView backBtn = new TextView(this);
         backBtn.setText("←");
         backBtn.setTextColor(Color.parseColor("#B9BE8A"));
-        backBtn.setTextSize(22);
-        backBtn.setIncludeFontPadding(false);
+        backBtn.setTextSize(24);
         backBtn.setGravity(Gravity.CENTER);
+        backBtn.setIncludeFontPadding(false);
+        backBtn.setPadding(0, 0, dp(2), dp(4)); 
         GradientDrawable backBg = new GradientDrawable();
         backBg.setShape(GradientDrawable.OVAL);
         backBg.setColor(Color.parseColor("#33B9BE8A"));
         backBtn.setBackground(backBg);
-        backBtn.setOnClickListener(v -> finish());
+        backBtn.setOnClickListener(v -> goHome());
 
         TextView title = new TextView(this);
-        title.setText("Глубокое сканирование");
+        title.setText("Сканер безопасности");
         title.setTextColor(Color.parseColor("#B9BE8A"));
         title.setTextSize(20);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1);
+        title.setTypeface(null, Typeface.BOLD);
+        title.setPadding(dp(15), 0, 0, 0);
 
         header.addView(backBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
-        header.addView(title, titleParams);
-        header.addView(new View(this), new LinearLayout.LayoutParams(dp(44), dp(44)));
+        header.addView(title);
 
         // Score Card
         LinearLayout scoreCard = new LinearLayout(this);
@@ -94,7 +98,7 @@ public class SecurityScannerActivity extends AppCompatActivity {
         scoreCard.setLayoutParams(scoreCardParams);
         GradientDrawable scoreCardBg = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#666844")});
+                new int[]{Color.parseColor("#4A4B2F"), Color.parseColor("#2E2F1C")});
         scoreCardBg.setCornerRadius(dp(20));
         scoreCard.setBackground(scoreCardBg);
 
@@ -110,7 +114,7 @@ public class SecurityScannerActivity extends AppCompatActivity {
         scoreText.setText("?");
         scoreText.setTextColor(Color.parseColor("#B9BE8A"));
         scoreText.setTextSize(36);
-        scoreText.setTypeface(null, android.graphics.Typeface.BOLD);
+        scoreText.setTypeface(null, Typeface.BOLD);
         scoreText.setGravity(Gravity.CENTER);
 
         circleContainer.addView(scoreCircle, new FrameLayout.LayoutParams(dp(120), dp(120)));
@@ -127,10 +131,10 @@ public class SecurityScannerActivity extends AppCompatActivity {
         progressBar.setVisibility(View.GONE);
 
         scanButton = new TextView(this);
-        ((TextView)scanButton).setText("Начать глубокую проверку");
-        ((TextView)scanButton).setTextColor(Color.parseColor("#12120A"));
+        ((TextView)scanButton).setText("Начать сканирование");
+        ((TextView)scanButton).setTextColor(Color.BLACK);
         ((TextView)scanButton).setTextSize(16);
-        ((TextView)scanButton).setTypeface(null, android.graphics.Typeface.BOLD);
+        ((TextView)scanButton).setTypeface(null, Typeface.BOLD);
         ((TextView)scanButton).setGravity(Gravity.CENTER);
         ((TextView)scanButton).setPadding(0, dp(18), 0, dp(18));
         GradientDrawable btnBg = new GradientDrawable();
@@ -155,7 +159,34 @@ public class SecurityScannerActivity extends AppCompatActivity {
         main.addView(resultsContainer);
 
         scrollView.addView(main);
-        setContentView(scrollView);
+        root.addView(scrollView, new FrameLayout.LayoutParams(-1, -1));
+
+        MainActivity.addBottomNav(root, 2, this);
+        setContentView(root);
+
+        loadLastSavedScore();
+    }
+
+    private void goHome() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
+    }
+
+    @Override
+    public void onBackPressed() {
+        goHome();
+    }
+
+    private void loadLastSavedScore() {
+        SharedPreferences prefs = getSharedPreferences("security_prefs", MODE_PRIVATE);
+        int lastScore = prefs.getInt("last_score", -1);
+        if (lastScore != -1) {
+            scoreText.setText(lastScore + "%");
+            updateCircleColor(lastScore);
+            scanStatusText.setText("Последняя проверка: " + (lastScore > 70 ? "Безопасно" : "Риск"));
+        }
     }
 
     private void startScan() {
@@ -163,7 +194,7 @@ public class SecurityScannerActivity extends AppCompatActivity {
         scanButton.setAlpha(0.5f);
         progressBar.setVisibility(View.VISIBLE);
         resultsContainer.removeAllViews();
-        
+
         executor.execute(() -> {
             List<ScanResult> results = performDeepScan();
             runOnUiThread(() -> showResults(results));
@@ -173,68 +204,91 @@ public class SecurityScannerActivity extends AppCompatActivity {
     private List<ScanResult> performDeepScan() {
         List<ScanResult> results = new ArrayList<>();
 
-        // 1. Root detection (REAL DEEP CHECK)
+        // 1. Root Check
         boolean isRooted = checkRoot();
         results.add(new ScanResult(
-                "Целостность системы",
-                isRooted ? "Обнаружен Root-доступ" : "Система не модифицирована",
+                "Root-права",
+                isRooted ? "Обнаружен Root-доступ" : "Система защищена",
                 isRooted ? ScanResult.STATUS_DANGER : ScanResult.STATUS_OK,
-                isRooted ? "Root-права позволяют вирусам полностью контролировать ваше устройство." : "Официальная прошивка, ядро в безопасности."
+                isRooted ? "Обнаружены признаки взлома системы (Root). Это позволяет любому приложению получить полный контроль над вашими данными. Рекомендуется использовать официальную прошивку." : "Root-доступ не обнаружен. Система сохраняет целостность."
         ));
 
-        // 2. ADB & Dev Mode
+        // 2. ADB Check
         boolean adb = Settings.Global.getInt(getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 1;
         results.add(new ScanResult(
                 "USB-отладка",
-                adb ? "Включена" : "Отключена",
+                adb ? "Включена" : "Выключена",
                 adb ? ScanResult.STATUS_WARN : ScanResult.STATUS_OK,
-                adb ? "Через USB-порт злоумышленник может скачать ваши данные. Отключите в настройках." : "Устройство защищено от физического подключения."
+                adb ? "Включенная отладка позволяет подключаться к телефону через компьютер без вашего ведома. Выключите ее в 'Настройках разработчика'." : "Отладка выключена, это повышает физическую безопасность устройства."
         ));
 
-        // 3. Permission Analysis (DEEP APP SCAN)
-        int spyApps = checkDangerousApps();
-        results.add(new ScanResult(
-                "Анализ разрешений",
-                spyApps > 0 ? "Найдено " + spyApps + " подозрительных прил." : "Угроз конфиденциальности не найдено",
-                spyApps > 0 ? ScanResult.STATUS_WARN : ScanResult.STATUS_OK,
-                spyApps > 0 ? "Некоторые приложения имеют доступ к камере и микрофону одновременно. Проверьте их." : "Ваши личные данные под защитой."
-        ));
-
-        // 4. Lock Screen
+        // 3. Screen Lock
         KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
         boolean secure = km != null && km.isDeviceSecure();
         results.add(new ScanResult(
                 "Блокировка экрана",
-                secure ? "Настроена" : "Не защищено",
+                secure ? "Настроена" : "Не настроена",
                 secure ? ScanResult.STATUS_OK : ScanResult.STATUS_WARN,
-                secure ? "Пароль/биометрия активны." : "Установите PIN-код, чтобы никто не смог прочитать ваши переписки."
+                secure ? "Экран защищен паролем или биометрией. Ваши данные в безопасности при потере устройства." : "Внимание! Устройство не защищено паролем. Любой может получить доступ к вашим фото и перепискам. Установите PIN или отпечаток."
         ));
+
+        // 4. Unknown Sources (for older Android or generic check)
+        boolean unknownSources = false;
+        try {
+            unknownSources = Settings.Secure.getInt(getContentResolver(), Settings.Secure.INSTALL_NON_MARKET_APPS, 0) == 1;
+        } catch (Exception ignored) {}
+        if (unknownSources) {
+            results.add(new ScanResult(
+                "Неизвестные источники",
+                "Разрешены",
+                ScanResult.STATUS_WARN,
+                "Разрешена установка приложений не из Google Play. Это увеличивает риск заражения вирусами. Отключите в настройках безопасности."
+            ));
+        }
+
+        // 5. Dangerous Apps
+        int dangerousApps = checkDangerousApps();
+        results.add(new ScanResult(
+                "Контроль разрешений",
+                dangerousApps > 0 ? "Найдено " + dangerousApps + " риск-прил." : "Угроз не найдено",
+                dangerousApps > 0 ? ScanResult.STATUS_WARN : ScanResult.STATUS_OK,
+                dangerousApps > 0 ? "Обнаружены сторонние приложения, которые имеют доступ одновременно к камере, микрофону и SMS. Проверьте их список в 'Anti-Spy'." : "Приложения не злоупотребляют критическими разрешениями."
+        ));
+
+        // 6. Developer Options
+        boolean devOptions = Settings.Global.getInt(getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1;
+        if (devOptions) {
+            results.add(new ScanResult(
+                "Режим разработчика",
+                "Активен",
+                ScanResult.STATUS_INFO,
+                "Режим разработчика включен. Если вы не разработчик, лучше его выключить для минимизации путей атаки."
+            ));
+        }
 
         return results;
     }
 
     private boolean checkRoot() {
         String[] paths = {"/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/su"};
-        for (String path : paths) {
-            if (new File(path).exists()) return true;
-        }
+        for (String path : paths) { if (new File(path).exists()) return true; }
         return Build.TAGS != null && Build.TAGS.contains("test-keys");
     }
 
     private int checkDangerousApps() {
         int count = 0;
         PackageManager pm = getPackageManager();
-        List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS);
-        for (PackageInfo pkg : packages) {
+        for (PackageInfo pkg : pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)) {
             if ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
-            boolean hasCam = false, hasMic = false;
+            boolean cam = false, mic = false, sms = false;
             if (pkg.requestedPermissions != null) {
                 for (String p : pkg.requestedPermissions) {
-                    if (Manifest.permission.CAMERA.equals(p)) hasCam = true;
-                    if (Manifest.permission.RECORD_AUDIO.equals(p)) hasMic = true;
+                    if (Manifest.permission.CAMERA.equals(p)) cam = true;
+                    if (Manifest.permission.RECORD_AUDIO.equals(p)) mic = true;
+                    if (Manifest.permission.READ_SMS.equals(p)) sms = true;
                 }
             }
-            if (hasCam && hasMic) count++;
+            if ((cam && mic) || (mic && sms)) count++;
         }
         return count;
     }
@@ -243,17 +297,21 @@ public class SecurityScannerActivity extends AppCompatActivity {
         progressBar.setVisibility(View.GONE);
         scanButton.setEnabled(true);
         scanButton.setAlpha(1.0f);
-        
+
         int score = 100;
         for (ScanResult r : results) {
-            if (r.status == ScanResult.STATUS_DANGER) score -= 30;
-            if (r.status == ScanResult.STATUS_WARN) score -= 15;
+            if (r.status == ScanResult.STATUS_DANGER) score -= 40;
+            if (r.status == ScanResult.STATUS_WARN) score -= 20;
         }
         score = Math.max(0, score);
         scoreText.setText(score + "%");
-        scanStatusText.setText(score > 70 ? "Устройство в безопасности" : "Требуется внимание!");
-        
+        scanStatusText.setText(score > 80 ? "Ваше устройство в безопасности" : score > 50 ? "Требуется внимание" : "ОБНАРУЖЕНЫ КРИТИЧЕСКИЕ УЯЗВИМОСТИ");
         updateCircleColor(score);
+
+        getSharedPreferences("security_prefs", MODE_PRIVATE)
+                .edit()
+                .putInt("last_score", score)
+                .apply(); 
 
         for (ScanResult r : results) {
             addResultCard(r);
@@ -262,51 +320,120 @@ public class SecurityScannerActivity extends AppCompatActivity {
 
     private void updateCircleColor(int score) {
         String color = score > 80 ? "#B9BE8A" : score > 50 ? "#C8A84B" : "#C85A4B";
-        GradientDrawable d = new GradientDrawable();
-        d.setShape(GradientDrawable.OVAL);
-        d.setColor(Color.parseColor("#2E2F1C"));
+        GradientDrawable d = (GradientDrawable) scoreCircle.getBackground();
         d.setStroke(dp(8), Color.parseColor(color));
-        scoreCircle.setBackground(d);
     }
 
     private void addResultCard(ScanResult r) {
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
+        card.setOrientation(LinearLayout.HORIZONTAL);
         card.setPadding(dp(15), dp(15), dp(15), dp(15));
+        card.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(12));
+        lp.setMargins(0, 0, 0, dp(10));
         card.setLayoutParams(lp);
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(15));
         bg.setColor(Color.parseColor("#2E2F1C"));
-        String color = (r.status == ScanResult.STATUS_OK) ? "#B9BE8A" : (r.status == ScanResult.STATUS_WARN ? "#C8A84B" : "#C85A4B");
-        bg.setStroke(dp(1), Color.parseColor(color));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), Color.parseColor(getStatusColor(r.status)));
         card.setBackground(bg);
 
-        TextView t = new TextView(this);
-        t.setText(r.title);
-        t.setTextColor(Color.parseColor(color));
-        t.setTypeface(null, android.graphics.Typeface.BOLD);
-        
-        TextView d = new TextView(this);
-        d.setText(r.detail + "\n" + r.advice);
-        d.setTextColor(Color.parseColor("#82855A"));
-        d.setTextSize(12);
-        d.setPadding(0, dp(5), 0, 0);
+        TextView title = new TextView(this);
+        title.setText(r.title);
+        title.setTextColor(Color.parseColor("#B9BE8A"));
+        title.setTypeface(null, Typeface.BOLD);
+        title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
 
-        card.addView(t);
-        card.addView(d);
+        TextView status = new TextView(this);
+        status.setText(getStatusText(r.status));
+        status.setTextColor(Color.parseColor(getStatusColor(r.status)));
+        status.setTypeface(null, Typeface.BOLD);
+
+        card.addView(title);
+        card.addView(status);
+        card.setOnClickListener(v -> showDetailDialog(r));
         resultsContainer.addView(card);
+    }
+
+    private void showDetailDialog(ScanResult r) {
+        Dialog dialog = new Dialog(this);
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(20), dp(20), dp(20));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#2E2F1C"));
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(2), Color.parseColor(getStatusColor(r.status)));
+        content.setBackground(bg);
+
+        TextView title = new TextView(this);
+        title.setText(r.title);
+        title.setTextColor(Color.parseColor("#B9BE8A"));
+        title.setTextSize(18);
+        title.setTypeface(null, Typeface.BOLD);
+
+        TextView desc = new TextView(this);
+        desc.setText(r.detail);
+        desc.setTextColor(Color.WHITE);
+        desc.setPadding(0, dp(10), 0, dp(15));
+
+        TextView fixTitle = new TextView(this);
+        fixTitle.setText("Анализ угроз:");
+        fixTitle.setTextColor(Color.parseColor("#82855A"));
+        fixTitle.setTypeface(null, Typeface.BOLD);
+
+        TextView fixDesc = new TextView(this);
+        fixDesc.setText(r.advice);
+        fixDesc.setTextColor(Color.parseColor("#82855A"));
+
+        TextView close = new TextView(this);
+        close.setText("Понятно");
+        close.setGravity(Gravity.CENTER);
+        close.setPadding(0, dp(12), 0, dp(12));
+        close.setTextColor(Color.BLACK);
+        close.setTypeface(null, Typeface.BOLD);
+        GradientDrawable btn = new GradientDrawable();
+        btn.setColor(Color.parseColor("#B9BE8A"));
+        btn.setCornerRadius(dp(10));
+        close.setBackground(btn);
+        close.setOnClickListener(v -> dialog.dismiss());
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+        clp.setMargins(0, dp(20), 0, 0);
+
+        content.addView(title);
+        content.addView(desc);
+        content.addView(fixTitle);
+        content.addView(fixDesc);
+        content.addView(close, clp);
+
+        dialog.setContentView(content);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.85), WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+        dialog.show();
+    }
+
+    private String getStatusText(int status) {
+        if (status == ScanResult.STATUS_OK) return "ОК";
+        if (status == ScanResult.STATUS_WARN) return "РИСК";
+        if (status == ScanResult.STATUS_INFO) return "ИНФО";
+        return "ОПАСНО";
+    }
+
+    private String getStatusColor(int status) {
+        if (status == ScanResult.STATUS_OK) return "#B9BE8A";
+        if (status == ScanResult.STATUS_WARN) return "#C8A84B";
+        if (status == ScanResult.STATUS_INFO) return "#4A4B2F";
+        return "#C85A4B";
     }
 
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 
     static class ScanResult {
-        static final int STATUS_OK = 0;
-        static final int STATUS_WARN = 1;
-        static final int STATUS_DANGER = 2;
-        static final int STATUS_INFO = 3;
+        static final int STATUS_OK = 0, STATUS_WARN = 1, STATUS_DANGER = 2, STATUS_INFO = 3;
         String title, detail, advice;
         int status;
         ScanResult(String t, String d, int s, String a) { title=t; detail=d; status=s; advice=a; }

@@ -2,6 +2,7 @@ package com.dave.secureguard.secureguardpro2;
 
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -16,28 +17,34 @@ import androidx.appcompat.app.AppCompatActivity;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class GeminiChatActivity extends AppCompatActivity {
 
-    private static final String PREFS_NAME = "ai_chat_history_new";
+    private static final String PREFS_NAME = "ai_chat_history_v7";
     private static final String HISTORY_KEY = "history_json";
 
-    static final String C_CHAT_BG = "#1A1B10";
+    static final String C_CHAT_BG = "#12120A";
     static final String C_BOT_MSG = "#2E2F1C";
     static final String C_USER_MSG = "#B9BE8A";
     static final String C_OLIVE   = "#B9BE8A";
 
-    private static final String SYSTEM_PROMPT = "Ты — AI-ассистент по интернет-безопасности SecureGuard Pro. " +
-            "Отвечай коротко (1-3 предложения), на русском языке. Темы: фишинг, пароли, вирусы.";
+    private static final String SYSTEM_PROMPT =
+            "Ты — ведущий AI-Наставник SecureGuard Pro. Твоя цель — обучать пользователя всему (наука, техника, быт, история и т.д.). " +
+            "ГЛАВНОЕ ПРАВИЛО: ВСЕГДА ОТВЕЧАЙ ОЧЕНЬ КРАТКО (максимум 2 предложения). " +
+            "Переходи к подробным объяснениям ТОЛЬКО если пользователь попросит 'объяснить подробнее' или 'рассказать детали'. " +
+            "В каждом коротком ответе обязательно упомяни краткую связь с интернет-безопасностью. " +
+            "Используй русский язык и профессиональный тон.";
 
     private static final String API_KEY = BuildConfig.OPENROUTER_API_KEY;
     private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -49,26 +56,24 @@ public class GeminiChatActivity extends AppCompatActivity {
     private SharedPreferences prefs;
     private List<JSONObject> conversationHistory = new ArrayList<>();
     private ExecutorService executor = Executors.newSingleThreadExecutor();
+    private OkHttpClient client;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-
-        // Устанавливаем фон окна — влияет на цвет области клавиатуры
-        getWindow().getDecorView().setBackgroundColor(Color.parseColor(C_CHAT_BG));
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setNavigationBarColor(Color.parseColor(C_CHAT_BG));
-        }
+        
+        client = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build();
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor(C_CHAT_BG));
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
-        main.setBackgroundColor(Color.parseColor(C_CHAT_BG));
 
-        // Header
         LinearLayout header = new LinearLayout(this);
         header.setPadding(dp(20), dp(50), dp(20), dp(20));
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -78,8 +83,10 @@ public class GeminiChatActivity extends AppCompatActivity {
         TextView backBtn = new TextView(this);
         backBtn.setText("←");
         backBtn.setTextColor(Color.parseColor(C_OLIVE));
-        backBtn.setTextSize(22);
+        backBtn.setTextSize(26);
         backBtn.setGravity(Gravity.CENTER);
+        backBtn.setIncludeFontPadding(false);
+        backBtn.setPadding(0, dp(2), 0, 0); 
         GradientDrawable backBg = new GradientDrawable();
         backBg.setShape(GradientDrawable.OVAL);
         backBg.setColor(Color.parseColor("#33B9BE8A"));
@@ -87,10 +94,10 @@ public class GeminiChatActivity extends AppCompatActivity {
         backBtn.setOnClickListener(v -> finish());
 
         TextView title = new TextView(this);
-        title.setText("AI Советник");
+        title.setText("AI Наставник");
         title.setTextColor(Color.parseColor(C_OLIVE));
         title.setTextSize(18);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTypeface(null, Typeface.BOLD);
         title.setPadding(dp(15), 0, 0, 0);
 
         header.addView(backBtn, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -98,19 +105,17 @@ public class GeminiChatActivity extends AppCompatActivity {
 
         scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(Color.parseColor(C_CHAT_BG));
         messagesContainer = new LinearLayout(this);
         messagesContainer.setOrientation(LinearLayout.VERTICAL);
         messagesContainer.setPadding(dp(15), dp(15), dp(15), dp(15));
-        messagesContainer.setBackgroundColor(Color.parseColor(C_CHAT_BG));
         scrollView.addView(messagesContainer);
 
         LinearLayout inputArea = new LinearLayout(this);
-        inputArea.setPadding(dp(15), dp(10), dp(15), dp(20));
+        inputArea.setPadding(dp(15), dp(10), dp(15), dp(95));
         inputArea.setBackgroundColor(Color.parseColor(C_CHAT_BG));
 
         inputField = new EditText(this);
-        inputField.setHint("Задайте вопрос...");
+        inputField.setHint("Спросите о чем угодно...");
         inputField.setHintTextColor(Color.parseColor("#555740"));
         inputField.setTextColor(Color.parseColor(C_OLIVE));
         inputField.setBackground(null);
@@ -144,8 +149,11 @@ public class GeminiChatActivity extends AppCompatActivity {
         main.addView(header);
         main.addView(scrollView, new LinearLayout.LayoutParams(-1, 0, 1));
         main.addView(inputArea);
-        setContentView(main);
 
+        root.addView(main, new FrameLayout.LayoutParams(-1, -1));
+        MainActivity.addBottomNav(root, 1, this);
+
+        setContentView(root);
         loadHistory();
     }
 
@@ -156,49 +164,54 @@ public class GeminiChatActivity extends AppCompatActivity {
         addMessage(text, true);
 
         executor.execute(() -> {
-            String resp = callAPI(text);
+            String resp = callOkHttpAPI(text);
             runOnUiThread(() -> {
-                if (resp != null) {
-                    addMessage(resp, false);
-                    saveHistory();
-                } else {
-                    addMessage("Ошибка сети.", false);
+                if (!isFinishing()) {
+                    if (resp != null) {
+                        addMessage(resp, false);
+                        saveHistory();
+                    } else {
+                        addMessage("Ошибка связи. Проверьте интернет.", false);
+                    }
                 }
             });
         });
     }
 
-    private String callAPI(String msg) {
+    private String callOkHttpAPI(String msg) {
         try {
             JSONObject userMsg = new JSONObject().put("role", "user").put("content", msg);
             conversationHistory.add(userMsg);
 
             JSONArray msgs = new JSONArray();
             msgs.put(new JSONObject().put("role", "system").put("content", SYSTEM_PROMPT));
-            int start = Math.max(0, conversationHistory.size() - 4);
+            int start = Math.max(0, conversationHistory.size() - 8);
             for (int i = start; i < conversationHistory.size(); i++) msgs.put(conversationHistory.get(i));
 
-            HttpURLConnection conn = (HttpURLConnection) new URL(API_URL).openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Authorization", "Bearer " + API_KEY);
-            conn.setDoOutput(true);
+            JSONObject payload = new JSONObject();
+            payload.put("model", MODEL);
+            payload.put("messages", msgs);
 
-            new JSONObject().put("model", MODEL).put("messages", msgs).toString();
-            OutputStream os = conn.getOutputStream();
-            os.write(new JSONObject().put("model", MODEL).put("messages", msgs).toString().getBytes("UTF-8"));
-            os.close();
+            RequestBody body = RequestBody.create(payload.toString(), MediaType.parse("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(API_URL)
+                    .addHeader("Authorization", "Bearer " + API_KEY)
+                    .post(body)
+                    .build();
 
-            if (conn.getResponseCode() == 200) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                String content = new JSONObject(sb.toString()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
-                conversationHistory.add(new JSONObject().put("role", "assistant").put("content", content));
-                return content;
+            try (Response response = client.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String responseData = response.body().string();
+                    String content = new JSONObject(responseData)
+                            .getJSONArray("choices").getJSONObject(0)
+                            .getJSONObject("message").getString("content");
+                    conversationHistory.add(new JSONObject().put("role", "assistant").put("content", content));
+                    return content;
+                }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
@@ -228,6 +241,8 @@ public class GeminiChatActivity extends AppCompatActivity {
         if (json != null) {
             try {
                 JSONArray array = new JSONArray(json);
+                conversationHistory.clear();
+                messagesContainer.removeAllViews();
                 for (int i = 0; i < array.length(); i++) {
                     JSONObject obj = array.getJSONObject(i);
                     conversationHistory.add(obj);
@@ -235,9 +250,15 @@ public class GeminiChatActivity extends AppCompatActivity {
                 }
             } catch (Exception ignored) {}
         } else {
-            addMessage("Привет! Я ваш AI-помощник. Чем могу помочь?", false);
+            addMessage("Привет! Я твой AI Наставник. Я помогу тебе изучить любые темы, не забывая о твоей безопасности!", false);
         }
     }
 
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+
+    @Override
+    protected void onDestroy() {
+        executor.shutdownNow();
+        super.onDestroy();
+    }
 }
