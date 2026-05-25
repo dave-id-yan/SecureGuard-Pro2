@@ -18,6 +18,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -62,6 +63,14 @@ public class QRScannerActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Обработка кнопки Назад (современный способ)
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                goHome();
+            }
+        });
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor(C_BG));
@@ -137,11 +146,6 @@ public class QRScannerActivity extends AppCompatActivity {
         finish();
     }
 
-    @Override
-    public void onBackPressed() {
-        goHome();
-    }
-
     private void checkPermissionAndScan() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startScan();
@@ -191,7 +195,7 @@ public class QRScannerActivity extends AppCompatActivity {
     private String resolveRedirects(String startUrl) {
         String currentUrl = startUrl;
         try {
-            for (int i = 0; i < 15; i++) { // Increased redirect limit
+            for (int i = 0; i < 15; i++) {
                 HttpURLConnection conn = (HttpURLConnection) new URL(currentUrl).openConnection();
                 conn.setInstanceFollowRedirects(false);
                 conn.setConnectTimeout(5000);
